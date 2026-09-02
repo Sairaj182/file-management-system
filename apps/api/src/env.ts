@@ -4,7 +4,7 @@ const schema = z.object({
   NODE_ENV: z
     .enum(["development", "production", "test"])
     .default("development"),
-  PORT: z.coerce.number().default(4000),
+  API_PORT: z.coerce.number().default(4000),
   HOST: z.string().default("0.0.0.0"),
   DATABASE_URL: z.string({ error: "DATABASE_URL is required" }),
   REDIS_HOST: z.string().default("localhost"),
@@ -51,8 +51,8 @@ const schema = z.object({
     .transform((v) => v === "true"),
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),
-  SMTP_FROM: z.string().default("Incubation Center Website <smtpapi@incubationcenter.nitp.ac.in>"),
-  CONTACT_EMAIL_TO: z.string().default("incubationcenter@nitp.ac.in"),
+  SMTP_FROM: z.string().default("fms"),
+  CONTACT_EMAIL_TO: z.string().default("help@vaultfs.com"),
   /* Contact form - ERP lead push (all optional; skips ERP if not configured) */
   ERP_API_URL: z
     .string()

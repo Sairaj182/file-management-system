@@ -30,12 +30,12 @@ export async function healthRoutes(app: FastifyInstance) {
 
     return {
       status: dbStatus === "connected" ? "ok" : "degraded",
-      service: "incubationcenter-api",
+      service: "fms-api",
       timestamp: new Date().toISOString(),
       database: dbStatus,
       config: {
         NODE_ENV: env.NODE_ENV,
-        PORT: env.PORT,
+        PORT: env.API_PORT,
         HOST: env.HOST,
         BETTER_AUTH_URL: env.BETTER_AUTH_URL,
         CORS_ORIGIN: env.CORS_ORIGIN,

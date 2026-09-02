@@ -29,10 +29,6 @@ function isAllowedGoogleEmail(email: string) {
   return !!domain && allowedGoogleDomains.includes(domain);
 }
 
-// In production the API lives at api.incubationcenter.nitp.ac.in and the web at incubationcenter.nitp.ac.in.
-// Without crossSubDomainCookies the session cookie is scoped to api.incubationcenter.nitp.ac.in only,
-// so Next.js server-side requests (which forward the browser's incubationcenter.nitp.ac.in cookies)
-// never include it and every admin API call returns 401.
 const authBaseUrl = process.env.BETTER_AUTH_URL ?? "http://localhost:4000";
 const authHostname = (() => {
   try {
@@ -47,7 +43,7 @@ const isIP = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(authHostname);
 const cookieDomain =
   isLocalhost || isIP
     ? undefined
-    : "." + authHostname.split(".").slice(-2).join("."); // api.incubationcenter.nitp.ac.in → .incubationcenter.nitp.ac.in
+    : "." + authHostname.split(".").slice(-2).join("."); 
 
 export const auth = betterAuth({
   database: prismaAdapter(prisma, {
@@ -91,14 +87,10 @@ export const auth = betterAuth({
     user: {
       create: {
         before: async (user) => {
-          // Only OAuth sign-ups arrive with a pre-verified email (credential
-          // and phone signups never set emailVerified: true) - this scopes
-          // the domain allowlist to Google sign-ins without touching phone
-          // signup, which uses a synthetic @incubationcenter.local email.
           if (user.emailVerified && !isAllowedGoogleEmail(user.email)) {
             throw new APIError("FORBIDDEN", {
               message:
-                "Sign-in is restricted to Incubation Center NITP staff Google accounts.",
+                "Sign-in is restricted to vaultfs.com google accounts.",
             });
           }
         },
@@ -160,7 +152,7 @@ export const auth = betterAuth({
         },
 
         getTempEmail(phoneNumber) {
-          return `${phoneNumber}@incubationcenter.local`;
+          return `${phoneNumber}@vaultfs.local`;
         },
       },
     }),

@@ -3,7 +3,7 @@ import { buildApp } from "./app";
 
 const app = buildApp();
 
-app.listen({ port: env.PORT, host: env.HOST }, (err, address) => {
+app.listen({ port: env.API_PORT, host: env.HOST }, (err, address) => {
   if (err) {
     app.log.error(err);
     process.exit(1);

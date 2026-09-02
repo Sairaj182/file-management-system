@@ -57,7 +57,7 @@ OTP   : ${otp}
         apiKey: this.apiKey,
         campaignName: "auth_otp_new",
         destination: toAiSensyPhone(phone),
-        userName: "incubationcenter",
+        userName: "vaultfs",
         templateParams: [otp],
         source: "web-auth",
         media: {},

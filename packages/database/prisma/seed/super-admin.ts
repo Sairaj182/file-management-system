@@ -2,7 +2,7 @@ import type { PrismaClient } from "../../generated/prisma/client";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 
-const EMAIL = process.env.SUPER_ADMIN_EMAIL ?? "super-admin-user@incubationcenter.local";
+const EMAIL = process.env.SUPER_ADMIN_EMAIL ?? "super-admin-user@vaultfs.local";
 const PASSWORD = process.env.SUPER_ADMIN_PASSWORD ?? "Your_Password_123";
 const NAME = process.env.SUPER_ADMIN_NAME ?? "Super Admin";
 
