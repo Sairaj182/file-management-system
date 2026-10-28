@@ -32,6 +32,9 @@ model User {
   trustedDevices      TrustedDevice[]
   roles               UserRole[]
 
+  createdDockyards Dockyards[] @relation("DockyardCreatedBy")
+  createdApis      Api[] @relation("ApiCreatedBy")
+  
   @@map("user")
 }
 
@@ -175,4 +178,41 @@ model AccountRecoveryRequest {
 model OtpCooldown {
   phoneNumber String   @id
   expiresAt   DateTime
-}
+}
+
+
+// DOCKYARD
+
+enum DockStatus{
+  ACTIVE
+  INACTIVE
+  INCUSTODY
+  SUSPENDED
+}
+
+model Dockyards {
+  id String @id @default(cuid())
+  status DockStatus
+  notes String
+
+  apiKeys Api[] 
+
+  
+  createdById String
+  createdBy User @relation("DockyardCreatedBy",fields:[createdById], references:[id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// one dockyard can have n api keys
+model Api {
+  id String @id @default(cuid())  
+  dockId String
+  dockyard Dockyards @relation(fields:[dockId],references:[id])
+
+  createdById String
+  createdBy User @relation("ApiCreatedBy",fields:[createdById], references:[id])
+
+  createdAt DateTime @default(now())
+}

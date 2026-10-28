@@ -152,52 +152,6 @@ importers:
         specifier: 5.9.2
         version: 5.9.2
 
-  apps/workers:
-    dependencies:
-      '@repo/database':
-        specifier: workspace:^
-        version: link:../../packages/database
-      bullmq:
-        specifier: ^5.0.0
-        version: 5.81.3
-      dotenv:
-        specifier: ^17.4.2
-        version: 17.4.2
-      ioredis:
-        specifier: ^5.11.1
-        version: 5.11.1
-      node-cron:
-        specifier: ^4.2.1
-        version: 4.6.0
-      nodemailer:
-        specifier: ^9.0.1
-        version: 9.0.5
-      tsx:
-        specifier: ^4.22.4
-        version: 4.23.12
-      zod:
-        specifier: ^4.4.3
-        version: 4.4.3
-    devDependencies:
-      '@repo/typescript-config':
-        specifier: workspace:^
-        version: link:../../packages/typescript-config
-      '@types/node':
-        specifier: ^22
-        version: 22.15.3
-      '@types/node-cron':
-        specifier: ^3.0.11
-        version: 3.0.11
-      '@types/nodemailer':
-        specifier: ^8.0.1
-        version: 8.0.1
-      tsup:
-        specifier: ^8.0.0
-        version: 8.5.1(jiti@2.7.0)(postcss@8.5.23)(tsx@4.23.12)(typescript@5.9.2)(yaml@2.4.2)
-      typescript:
-        specifier: ^5
-        version: 5.9.2
-
   packages/auth:
     dependencies:
       '@better-auth/prisma-adapter':
@@ -1780,17 +1734,11 @@ packages:
   '@types/lodash@4.17.25':
     resolution: {integrity: sha512-+K1NIO8I+F9/wNulfVvu23QYd0Pe9/OCqRrim4NoYIf1VoEDL90Ve4ClzpyqBLc7NpGGWRvYNCKZ1BE/Jpf8dQ==}
 
-  '@types/node-cron@3.0.11':
-    resolution: {integrity: sha512-0ikrnug3/IyneSHqCBeslAhlK2aBfYek1fGo4bP4QnZPmiqSGRK+Oy7ZMisLWkesffJvQ1cqAcBnJC+8+nxIAg==}
-
   '@types/node@22.15.3':
     resolution: {integrity: sha512-lX7HFZeHf4QG/J7tBZqrCAXwz9J5RD56Y6MpP0eJkka8p+K0RY/yBTW7CYFJ4VGCclxqOLKmiGP5juQc6MKgcw==}
 
   '@types/node@26.2.0':
     resolution: {integrity: sha512-5IviulTZeRNp2vAJ514cc/HUlY5nZ9fCbq9DMyC52BrhFZACo3nI0R7qBxhQmo/d27NFe96ur/b7Wwxklda+kg==}
-
-  '@types/nodemailer@8.0.1':
-    resolution: {integrity: sha512-PxpaInm8V1JQDd4j0ds5HfvWQk8JupS1C0Picb96QJsrrRDjBH+DlK7L4ZdNSqNULhiZRQHc40nLVShaGxXAMw==}
 
   '@types/pg@8.23.1':
     resolution: {integrity: sha512-fKVHpikPdg4GKks3JuLEhvwSyvwzF23hnabPy6DD8ljVbC7+6J5dQzdv4arV6jqq57djnMgs1HKBxX4P8aBI3A==}
@@ -3121,10 +3069,6 @@ packages:
     resolution: {integrity: sha512-VijLXbi3UACN69I0JVXJsX4tjACjNoQDgv2gTF6sx2wWEi8tkSg2eX8p5gSIFi8z2+DL3oHmY6OyKce38SDolg==}
     engines: {node: ^18 || ^20 || >= 21}
 
-  node-cron@4.6.0:
-    resolution: {integrity: sha512-Si/bzYiKRHOB8/a99T2+SDGN582ONDMSTlJr5oCkT6GtnqPjZ2s10eoQRYkW9ZHwjVxONL+W8Fb+qR0AHMQsdg==}
-    engines: {node: '>=20'}
-
   node-gyp-build-optional-packages@5.2.2:
     resolution: {integrity: sha512-s+w+rBWnpTMwSFbaE0UXsRlg7hU4FjekKU4eyAih5T8nJuNZT1nNsskXpxmeqSK9UzkBl6UgRlnKc8hz8IEqOw==}
     hasBin: true
@@ -3135,10 +3079,6 @@ packages:
 
   node-html-parser@5.4.2:
     resolution: {integrity: sha512-RaBPP3+51hPne/OolXxcz89iYvQvKOydaqoePpOgXcrOKZhjVIzmpKZz+Hd/RBO2/zN2q6CNJhQzucVz+u3Jyw==}
-
-  nodemailer@9.0.5:
-    resolution: {integrity: sha512-wvjiKvjczmsN7U/8006JOdXubgBk2XFAbioDMbT+sM7cPs0QrhJTa6KBRX7P5REGGkDcLUz/EarWidb8G8C1jQ==}
-    engines: {node: '>=6.0.0'}
 
   nth-check@2.1.1:
     resolution: {integrity: sha512-lqjrjmaOoAnWfMmBPL+XNnynZh2+swxiX3WUE0s4yEHI6m+AwrK2UZOimIRl3X/4QctVqS8AiZjFqyOGrMXb/w==}
@@ -5145,8 +5085,6 @@ snapshots:
 
   '@types/lodash@4.17.25': {}
 
-  '@types/node-cron@3.0.11': {}
-
   '@types/node@22.15.3':
     dependencies:
       undici-types: 6.21.0
@@ -5154,10 +5092,6 @@ snapshots:
   '@types/node@26.2.0':
     dependencies:
       undici-types: 8.3.0
-
-  '@types/nodemailer@8.0.1':
-    dependencies:
-      '@types/node': 22.15.3
 
   '@types/pg@8.23.1':
     dependencies:
@@ -6801,8 +6735,6 @@ snapshots:
 
   node-addon-api@8.9.2: {}
 
-  node-cron@4.6.0: {}
-
   node-gyp-build-optional-packages@5.2.2:
     dependencies:
       detect-libc: 2.1.2
@@ -6814,8 +6746,6 @@ snapshots:
     dependencies:
       css-select: 4.3.0
       he: 1.2.0
-
-  nodemailer@9.0.5: {}
 
   nth-check@2.1.1:
     dependencies:

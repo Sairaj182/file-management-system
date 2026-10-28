@@ -5,7 +5,7 @@ import { UserPermissions } from "@repo/rbac";
 import { requireAuth } from "../../middleware/auth";
 import { authorize } from "../../middleware/rbac";
 
-export const adminRecoveryRoutes: FastifyPluginAsync = async (app) => {
+  export const adminRecoveryRoutes: FastifyPluginAsync = async (app) => {
   // 1. Get all pending or flagged recoveries
   app.get(
     "/recoveries",

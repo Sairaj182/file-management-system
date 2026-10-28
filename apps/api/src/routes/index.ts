@@ -5,7 +5,7 @@ import { rolesRoutes } from "./roles";
 import { usersRoutes } from "./users";
 import { recoveryRoutes } from "./recovery";
 import { adminRecoveryRoutes } from "./admin/recoveries";
-
+import { dockyardRoutes } from "./admin/dockyard";
 
 export function registerRoutes(app: FastifyInstance) {
   app.register(healthRoutes, { prefix: "/api" });
@@ -14,4 +14,5 @@ export function registerRoutes(app: FastifyInstance) {
   app.register(usersRoutes, { prefix: "/api/users" });
   app.register(recoveryRoutes, { prefix: "/api/recovery" });
   app.register(adminRecoveryRoutes, { prefix: "/api/admin" });
+  app.register(dockyardRoutes, {prefix: "/api/dockyard"});
 }
