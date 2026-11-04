@@ -2,7 +2,7 @@ import { AnalyticsPermissions } from "./analytics";
 import { RolePermissions } from "./role";
 import { SettingsPermissions } from "./settings";
 import { UserPermissions } from "./user";
-
+import { DockyardPermissions } from "./dockyard";
 import type { PermissionDefinition } from "./types";
 
 export const PermissionRegistry = {
@@ -10,6 +10,7 @@ export const PermissionRegistry = {
   role: RolePermissions,
   settings: SettingsPermissions,
   analytics: AnalyticsPermissions,
+  dockyard: DockyardPermissions,
 } as const;
 
 export const AllPermissions: PermissionDefinition[] = Object.values(
