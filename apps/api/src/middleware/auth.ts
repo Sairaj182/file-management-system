@@ -1,5 +1,6 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
 import { auth } from "@repo/auth/server";
+import { safeSessionLogContext } from "../security/policies";
 
 export async function requireAuth(
   request: FastifyRequest,
@@ -19,14 +20,7 @@ export async function requireAuth(
       headers: webHeaders,
     });
 
-    request.log.info(
-      {
-        cookieHeader: request.headers.cookie,
-        hasSession: !!session,
-        userId: session?.user?.id,
-      },
-      "[requireAuth] session verification result",
-    );
+    request.log.debug(safeSessionLogContext(session), "Session verification completed");
 
     if (!session || !session.user) {
       return reply.status(401).send({ error: "Unauthorized" });
@@ -35,8 +29,8 @@ export async function requireAuth(
     // Attach user and session to request
     (request as any).user = session.user;
     (request as any).session = session.session;
-  } catch (error: any) {
-    request.log.error(error, "[requireAuth] error verifying session");
+  } catch {
+    request.log.warn({ event: "session_verification_failed" }, "Session verification failed");
     return reply.status(401).send({ error: "Unauthorized" });
   }
 }
@@ -63,7 +57,7 @@ export async function optionalAuth(
       (request as any).user = session.user;
       (request as any).session = session.session;
     }
-  } catch (error: any) {
-    // Ignore errors for optional auth
+  } catch {
+    // Optional auth intentionally treats malformed or expired credentials as anonymous.
   }
 }

@@ -24,10 +24,12 @@ export async function betterAuthRoutes(app: FastifyInstance) {
     reply.hijack();
     try {
       await handler(request.raw, reply.raw);
-    } catch (err) {
-      console.error("BetterAuth error:");
-      console.error(err);
-      throw err;
+    } catch {
+      request.log.error({ event: "better_auth_handler_failed" }, "Authentication handler failed");
+      if (!reply.raw.headersSent) {
+        reply.raw.statusCode = 500;
+        reply.raw.end("Internal Server Error");
+      }
     }
     return;
   });

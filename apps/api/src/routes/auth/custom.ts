@@ -3,6 +3,7 @@ import rateLimit from "@fastify/rate-limit";
 import { auth } from "@repo/auth/server";
 import { prisma } from "@repo/database";
 import { z } from "zod";
+import { parsePhoneNumberFromString } from "libphonenumber-js";
 
 const checkUserSchema = z.object({
   phoneNumber: z.string(),
@@ -30,13 +31,12 @@ export async function customRoutes(app: FastifyInstance) {
     },
     async (request, reply) => {
       try {
-        const { phoneNumber } = checkUserSchema.parse(request.body);
+        const { phoneNumber: rawPhoneNumber } = checkUserSchema.parse(request.body);
+        const parsedPhone = parsePhoneNumberFromString(rawPhoneNumber, "IN");
+        if (!parsedPhone?.isValid()) return reply.status(400).send({ error: "Invalid request" });
 
-        const user = await prisma.user.findUnique({
-          where: { phoneNumber },
-        });
-
-        return reply.send({ exists: !!user });
+        void parsedPhone;
+        return reply.send({ success: true });
       } catch (err: any) {
         return reply
           .status(400)
@@ -89,11 +89,11 @@ export async function customRoutes(app: FastifyInstance) {
       });
 
       return reply.send({ success: true });
-    } catch (err: any) {
-      console.error("Set password error:", err);
+    } catch {
+      request.log.warn({ event: "set_password_failed" }, "Set password request failed");
       return reply
         .status(400)
-        .send({ error: err.message || "Failed to set password" });
+        .send({ error: "Failed to set password" });
     }
   });
 }

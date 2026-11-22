@@ -10,13 +10,12 @@ COPY packages/auth/package.json ./packages/auth/
 COPY packages/database/package.json ./packages/database/
 COPY packages/env/package.json ./packages/env/
 COPY packages/eslint-config/package.json ./packages/eslint-config/
+COPY packages/rbac/package.json ./packages/rbac/
 COPY packages/typescript-config/package.json ./packages/typescript-config/
 COPY packages/ui/package.json ./packages/ui/
-RUN pnpm install --frozen-lockfile
-# Generate Prisma client - needs schema only, no DB connection required
 COPY packages/database/prisma ./packages/database/prisma
 COPY packages/database/prisma.config.ts ./packages/database/prisma.config.ts
-RUN pnpm --filter @repo/database run db:generate
+RUN pnpm install --frozen-lockfile
 
 FROM base AS builder
 WORKDIR /app

@@ -9,8 +9,29 @@ import { registerRoutes } from "./routes";
 
 export function buildApp() {
   const app = Fastify({
-    logger: { level: env.NODE_ENV === "production" ? "info" : "debug" },
-    trustProxy: true,
+    routerOptions: { maxParamLength: 1024 },
+    logger: {
+      level: env.NODE_ENV === "production" ? "info" : "debug",
+      redact: ["req.headers.x-api-key", "req.headers.authorization", "req.headers.cookie"],
+      serializers: {
+        req(request) {
+          const requestUrl = String(request.url ?? "");
+          const safeUrl = requestUrl.startsWith("/api/files/signed/")
+            ? "/api/files/signed/[redacted]"
+            : requestUrl.split("?", 1)[0];
+          return {
+            method: request.method,
+            url: safeUrl,
+            hostname: request.hostname,
+            remoteAddress: request.ip,
+            remotePort: request.socket?.remotePort,
+          };
+        },
+      },
+    },
+    // Forwarded headers are untrusted unless the deployment explicitly names
+    // trusted proxy IPs/CIDRs (comma-separated in TRUST_PROXY).
+    trustProxy: env.TRUST_PROXY,
   });
 
   app.register(fastifyCors, {
@@ -27,7 +48,13 @@ export function buildApp() {
   });
 
   app.register(fastifyMultipart, {
-    limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+    throwFileSizeLimit: true,
+    limits: {
+      fileSize: env.FILE_MAX_SIZE_BYTES,
+      files: env.FILE_MAX_COUNT + 1,
+      fields: 10,
+      parts: env.FILE_MAX_COUNT + 12,
+    },
   });
 
   // Global registration only - `global: false` means no route is limited

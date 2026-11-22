@@ -4,10 +4,11 @@ import { AllPermissions, RolePermissions } from "@repo/rbac";
 
 import { requireAuth } from "../../middleware/auth";
 import { authorize } from "../../middleware/rbac";
-import { roleService } from "../../rbac";
+import { permissionService, roleService } from "../../rbac";
+import { canAssignRoleThroughRoleEndpoint } from "../../security/policies";
 
 const createRoleSchema = z.object({
-  name: z.string(),
+  name: z.string().trim().min(1).refine((name) => name.toLowerCase() !== "super admin", "Reserved system role name"),
   description: z.string().optional(),
   permissions: z.array(
     z.object({
@@ -19,6 +20,8 @@ const createRoleSchema = z.object({
 });
 
 const updateRoleSchema = createRoleSchema.partial();
+
+export { canAssignRoleThroughRoleEndpoint } from "../../security/policies";
 
 export async function rolesRoutes(app: FastifyInstance) {
   // GET /api/roles/permissions - canonical permission registry for role editors
@@ -177,6 +180,10 @@ export async function rolesRoutes(app: FastifyInstance) {
           return reply.status(400).send({ error: "userId is required" });
         }
 
+        const role = await roleService.getRole(id);
+        if (!canAssignRoleThroughRoleEndpoint(role ?? null)) {
+          return reply.status(403).send({ error: "System roles cannot be assigned through this endpoint" });
+        }
         await roleService.assignRole(userId, id);
         return reply.send({ success: true });
       } catch (err: any) {
@@ -197,6 +204,14 @@ export async function rolesRoutes(app: FastifyInstance) {
     async (request, reply) => {
       try {
         const { id, userId } = request.params as { id: string; userId: string };
+        const role = await roleService.getRole(id);
+        if (role?.isSystem) {
+          const actor = (request as any).user;
+          const authorization = await permissionService.getAuthorizationContext(actor.id);
+          if (!authorization.isSuperAdmin) {
+            return reply.status(403).send({ error: "Only Super Admin can change system role assignments" });
+          }
+        }
         await roleService.removeRole(userId, id);
         return reply.send({ success: true });
       } catch (err: any) {

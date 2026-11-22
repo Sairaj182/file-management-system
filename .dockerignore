@@ -5,8 +5,11 @@
 .gitignore
 .github
 
-.next
-.turbo
+**/.next
+**/.turbo
+**/test-results
+**/playwright-report
+**/.vaultfs-storage
 dist
 build
 coverage

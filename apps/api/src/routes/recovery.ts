@@ -1,12 +1,14 @@
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { prisma } from "@repo/database";
+import { normalizeRecoveryPhone } from "../utils/phone";
+export { normalizeRecoveryPhone } from "../utils/phone";
 
 export const recoveryRoutes: FastifyPluginAsync = async (app) => {
   // 1. Request Account Recovery
-  app.post("/request", async (request, reply) => {
+  app.post("/request", { config: { rateLimit: { max: 5, timeWindow: "1 hour" } } }, async (request, reply) => {
     const schema = z.object({
-      phoneNumber: z.string(),
+      phoneNumber: z.string().trim().min(6).max(32),
     });
 
     const parsed = schema.safeParse(request.body);
@@ -14,7 +16,8 @@ export const recoveryRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(400).send({ error: "Invalid request body" });
     }
 
-    const { phoneNumber } = parsed.data;
+    const phoneNumber = normalizeRecoveryPhone(parsed.data.phoneNumber);
+    if (!phoneNumber) return reply.status(400).send({ error: "Invalid request body" });
 
     // Check if user has exceeded max requests in the last 24 hours
     const windowStart = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -28,7 +31,7 @@ export const recoveryRoutes: FastifyPluginAsync = async (app) => {
     });
 
     if (existingRequest) {
-      if (existingRequest.requestCount > 10) {
+      if (existingRequest.requestCount >= 10) {
         // Short-circuit to prevent excessive DB updates during a spam attack
         return reply.send({ success: true });
       }
@@ -42,7 +45,7 @@ export const recoveryRoutes: FastifyPluginAsync = async (app) => {
       await prisma.accountRecoveryRequest.update({
         where: { id: existingRequest.id },
         data: {
-          requestCount: newCount,
+          requestCount: { increment: 1 },
           status: newStatus,
         },
       });
@@ -64,9 +67,9 @@ export const recoveryRoutes: FastifyPluginAsync = async (app) => {
   });
 
   // 2. Check Cooldown Status
-  app.get("/cooldown", async (request, reply) => {
+  app.get("/cooldown", { config: { rateLimit: { max: 10, timeWindow: "1 hour" } } }, async (request, reply) => {
     const schema = z.object({
-      phoneNumber: z.string(),
+      phoneNumber: z.string().trim().min(6).max(32),
     });
 
     const parsed = schema.safeParse(request.query);
@@ -74,25 +77,8 @@ export const recoveryRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(400).send({ error: "Invalid query parameters" });
     }
 
-    const { phoneNumber } = parsed.data;
-
-    const cooldown = await prisma.otpCooldown.findUnique({
-      where: { phoneNumber },
-    });
-
-    if (!cooldown) {
-      return reply.send({ active: false, remainingSeconds: 0 });
-    }
-
-    const remaining = Math.floor(
-      (cooldown.expiresAt.getTime() - Date.now()) / 1000,
-    );
-    if (remaining > 0) {
-      return reply.send({ active: true, remainingSeconds: remaining });
-    }
-
-    // Expired
-    await prisma.otpCooldown.delete({ where: { phoneNumber } });
+    if (!normalizeRecoveryPhone(parsed.data.phoneNumber)) return reply.status(400).send({ error: "Invalid query parameters" });
+    // Keep the legacy response shape without exposing whether a phone is throttled.
     return reply.send({ active: false, remainingSeconds: 0 });
   });
 };
