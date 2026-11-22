@@ -30,20 +30,20 @@ function isAllowedGoogleEmail(email: string) {
 }
 
 const authBaseUrl = process.env.BETTER_AUTH_URL ?? "http://localhost:4000";
-const authHostname = (() => {
-  try {
-    return new URL(authBaseUrl).hostname;
-  } catch {
-    return "localhost";
+// Host-only cookies are the safe default. Cross-subdomain sharing requires an
+// explicitly configured COOKIE_DOMAIN matching the deployment's public domain.
+const cookieDomain = process.env.COOKIE_DOMAIN?.trim() || undefined;
+if (cookieDomain) {
+  const authHostname = new URL(authBaseUrl).hostname;
+  const domainHostname = cookieDomain.replace(/^\./, "").toLowerCase();
+  if (
+    domainHostname.split(".").length < 2 ||
+    !/^[a-z0-9.-]+$/.test(domainHostname) ||
+    !(authHostname === domainHostname || authHostname.endsWith(`.${domainHostname}`))
+  ) {
+    throw new Error("COOKIE_DOMAIN must be a parent domain of BETTER_AUTH_URL");
   }
-})();
-const isLocalhost =
-  authHostname === "localhost" || authHostname.endsWith(".localhost");
-const isIP = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(authHostname);
-const cookieDomain =
-  isLocalhost || isIP
-    ? undefined
-    : "." + authHostname.split(".").slice(-2).join("."); 
+}
 
 export const auth = betterAuth({
   database: prismaAdapter(prisma, {
@@ -56,11 +56,16 @@ export const auth = betterAuth({
     enabled: true,
   },
   trustedOrigins,
-  trustedProxies: true,
+  trustedProxies: false,
   advanced: {
     crossSubDomainCookies: {
-      enabled: !isLocalhost,
+      enabled: Boolean(cookieDomain),
       domain: cookieDomain,
+    },
+    defaultCookieAttributes: {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: authBaseUrl.startsWith("https://"),
     },
   },
   rateLimit: {

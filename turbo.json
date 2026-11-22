@@ -8,10 +8,85 @@
       "outputs": [".next/**", "!.next/cache/**", "!.next/dev/**"]
     },
     "lint": {
-      "dependsOn": ["^lint"]
+      "dependsOn": ["^lint"],
+      "env": [
+        "API_URL",
+        "WEB_ORIGIN",
+        "PORT_WEB",
+        "API_PORT",
+        "NEXT_PUBLIC_API_URL",
+        "FILE_MAX_SIZE_BYTES",
+        "FILE_MAX_COUNT",
+        "FILE_SIGNED_URL_MAX_TTL_SECONDS",
+        "DATABASE_URL",
+        "SUPER_ADMIN_EMAIL",
+        "SUPER_ADMIN_PASSWORD",
+        "VAULTFS_BASE_URL",
+        "VAULTFS_DOCKYARD_ID",
+        "VAULTFS_API_KEY",
+        "FILE_SMOKE_TEST_PATH",
+        "FILE_SMOKE_DOWNLOAD_PATH"
+      ]
     },
     "check-types": {
       "dependsOn": ["^check-types"]
+    },
+    "test": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "test:integration": {
+      "cache": false,
+      "outputs": [],
+      "env": [
+        "DATABASE_URL",
+        "BETTER_AUTH_SECRET",
+        "BETTER_AUTH_URL",
+        "JWT_SECRET",
+        "API_PORT",
+        "HOST",
+        "TRUST_PROXY",
+        "CORS_ORIGIN",
+        "GOOGLE_CLIENT_ID",
+        "GOOGLE_CLIENT_SECRET",
+        "GOOGLE_ALLOWED_DOMAINS",
+        "GEMINI_API_KEY",
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_REGION",
+        "AWS_BUCKET_NAME",
+        "SUPER_ADMIN_NAME",
+        "SUPER_ADMIN_EMAIL",
+        "SUPER_ADMIN_PASSWORD"
+      ]
+    },
+    "test:whitebox": {
+      "outputs": []
+    },
+    "test:blackbox": {
+      "cache": false,
+      "outputs": [],
+      "env": [
+        "DATABASE_URL",
+        "BETTER_AUTH_SECRET",
+        "BETTER_AUTH_URL",
+        "JWT_SECRET",
+        "API_PORT",
+        "HOST",
+        "TRUST_PROXY",
+        "CORS_ORIGIN",
+        "GOOGLE_CLIENT_ID",
+        "GOOGLE_CLIENT_SECRET",
+        "GOOGLE_ALLOWED_DOMAINS",
+        "GEMINI_API_KEY",
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_REGION",
+        "AWS_BUCKET_NAME",
+        "SUPER_ADMIN_NAME",
+        "SUPER_ADMIN_EMAIL",
+        "SUPER_ADMIN_PASSWORD"
+      ]
     },
     "dev": {
       "cache": false,

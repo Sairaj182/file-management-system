@@ -1,0 +1,1 @@
+ALTER TYPE "FileLifecycleState" ADD VALUE 'QUARANTINED';

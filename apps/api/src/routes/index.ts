@@ -6,6 +6,9 @@ import { usersRoutes } from "./users";
 import { recoveryRoutes } from "./recovery";
 import { adminRecoveryRoutes } from "./admin/recoveries";
 import { dockyardRoutes } from "./admin/dockyard";
+import { apiKeyManagementRoutes } from "./admin/api-keys";
+import { integrationRoutes } from "./integration";
+import { fileRoutes, signedFileRoutes } from "./files";
 
 export function registerRoutes(app: FastifyInstance) {
   app.register(healthRoutes, { prefix: "/api" });
@@ -15,4 +18,8 @@ export function registerRoutes(app: FastifyInstance) {
   app.register(recoveryRoutes, { prefix: "/api/recovery" });
   app.register(adminRecoveryRoutes, { prefix: "/api/admin" });
   app.register(dockyardRoutes, {prefix: "/api/dockyard"});
+  app.register(apiKeyManagementRoutes, { prefix: "/api/dockyard" });
+  app.register(integrationRoutes, { prefix: "/api/integration" });
+  app.register(fileRoutes, { prefix: "/api/dockyard" });
+  app.register(signedFileRoutes, { prefix: "/api/files" });
 }

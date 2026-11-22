@@ -6,6 +6,13 @@ const schema = z.object({
     .default("development"),
   API_PORT: z.coerce.number().default(4000),
   HOST: z.string().default("0.0.0.0"),
+  TRUST_PROXY: z
+    .union([
+      z.literal("false"),
+      z.string().regex(/^[0-9a-fA-F:.]+(?:\/\d{1,3})?(?:,[0-9a-fA-F:.]+(?:\/\d{1,3})?)*$/),
+    ])
+    .default("false")
+    .transform((value) => (value === "false" ? false : value)),
   DATABASE_URL: z.string({ error: "DATABASE_URL is required" }),
   REDIS_HOST: z.string().default("localhost"),
   REDIS_PORT: z.coerce.number().default(6379),
@@ -21,6 +28,12 @@ const schema = z.object({
     .string({ error: "BETTER_AUTH_SECRET is required" })
     .min(32),
   BETTER_AUTH_URL: z.string().url().default("http://localhost:4000"),
+  FILE_STORAGE_ROOT: z.string().min(1).default("./.vaultfs-storage"),
+  FILE_SIGNING_SECRET: z.string({ error: "FILE_SIGNING_SECRET is required" }).min(32),
+  FILE_PUBLIC_BASE_URL: z.string().url().default("http://localhost:4000"),
+  FILE_SIGNED_URL_MAX_TTL_SECONDS: z.coerce.number().int().min(30).max(3600).default(300),
+  FILE_MAX_SIZE_BYTES: z.coerce.number().int().min(1).max(100 * 1024 * 1024).default(10 * 1024 * 1024),
+  FILE_MAX_COUNT: z.coerce.number().int().min(1).max(20).default(5),
   GOOGLE_CLIENT_ID: z.string({
     error: "GOOGLE_CLIENT_ID is required for admin Google sign-in",
   }),

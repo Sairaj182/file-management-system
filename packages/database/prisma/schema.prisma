@@ -34,6 +34,11 @@ model User {
 
   createdDockyards Dockyards[] @relation("DockyardCreatedBy")
   createdApis      Api[] @relation("ApiCreatedBy")
+  dockyardMemberships DockyardMember[] @relation("DockyardMembershipUser")
+  addedDockyardMembers DockyardMember[] @relation("DockyardMemberAddedBy")
+  uploadedDockyardFiles DockyardFile[] @relation("DockyardFileUploader")
+  dockyardAuditEvents DockyardAuditEvent[] @relation("DockyardAuditActor")
+  targetedDockyardAuditEvents DockyardAuditEvent[] @relation("DockyardAuditTarget")
   
   @@map("user")
 }
@@ -191,12 +196,36 @@ enum DockStatus{
   SUSPENDED
 }
 
+enum DockyardMemberRole {
+  OWNER
+  MANAGER
+  VIEWER
+}
+
+enum ApiKeyScope {
+  FILE_READ
+  FILE_WRITE
+  FILE_DELETE
+}
+
+enum FileLifecycleState {
+  STAGED
+  AVAILABLE
+  QUARANTINED
+  DELETING
+  DELETED
+  FAILED
+}
+
 model Dockyards {
   id String @id @default(cuid())
   status DockStatus
   notes String
 
   apiKeys Api[] 
+  members DockyardMember[]
+  files DockyardFile[]
+  auditEvents DockyardAuditEvent[]
 
   
   createdById String
@@ -210,10 +239,78 @@ model Dockyards {
 model Api {
   id String @id @default(cuid())  
   dockId String
-  dockyard Dockyards @relation(fields:[dockId],references:[id])
+  dockyard Dockyards @relation(fields:[dockId],references:[id], onDelete: Restrict)
 
   createdById String
-  createdBy User @relation("ApiCreatedBy",fields:[createdById], references:[id])
+  createdBy User @relation("ApiCreatedBy",fields:[createdById], references:[id], onDelete: Restrict)
+
+  name String?
+  keyPrefix String? @unique
+  keyDigest String? @unique
+  scopes ApiKeyScope[] @default([])
+  expiresAt DateTime?
+  revokedAt DateTime?
+  lastUsedAt DateTime?
 
   createdAt DateTime @default(now())
+
+  @@index([dockId, revokedAt])
+  @@index([expiresAt])
+}
+
+model DockyardMember {
+  id String @id @default(cuid())
+  dockyardId String
+  userId String
+  role DockyardMemberRole
+  addedById String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  dockyard Dockyards @relation(fields: [dockyardId], references: [id], onDelete: Restrict)
+  user User @relation("DockyardMembershipUser", fields: [userId], references: [id], onDelete: Restrict)
+  addedBy User? @relation("DockyardMemberAddedBy", fields: [addedById], references: [id], onDelete: SetNull)
+
+  @@unique([dockyardId, userId])
+  @@index([userId, dockyardId])
+  @@index([dockyardId, role])
+}
+
+model DockyardFile {
+  id String @id @default(cuid())
+  dockyardId String
+  uploadedById String?
+  storageKey String @unique
+  originalName String
+  contentType String
+  sizeBytes BigInt
+  sha256 String?
+  state FileLifecycleState @default(STAGED)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  dockyard Dockyards @relation(fields: [dockyardId], references: [id], onDelete: Restrict)
+  uploadedBy User? @relation("DockyardFileUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([dockyardId, state, createdAt])
+  @@index([uploadedById])
+}
+
+model DockyardAuditEvent {
+  id String @id @default(cuid())
+  dockyardId String
+  actorUserId String?
+  targetUserId String?
+  action String
+  metadata Json?
+  createdAt DateTime @default(now())
+
+  dockyard Dockyards @relation(fields: [dockyardId], references: [id], onDelete: Restrict)
+  actor User? @relation("DockyardAuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  target User? @relation("DockyardAuditTarget", fields: [targetUserId], references: [id], onDelete: SetNull)
+
+  @@index([dockyardId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([targetUserId])
 }

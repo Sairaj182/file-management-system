@@ -3,7 +3,7 @@ import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 
 const EMAIL = process.env.SUPER_ADMIN_EMAIL ?? "super-admin-user@vaultfs.local";
-const PASSWORD = process.env.SUPER_ADMIN_PASSWORD ?? "Your_Password_123";
+const PASSWORD = process.env.SUPER_ADMIN_PASSWORD;
 const NAME = process.env.SUPER_ADMIN_NAME ?? "Super Admin";
 
 export async function seedSuperAdmin(prisma: PrismaClient): Promise<void> {
@@ -13,6 +13,9 @@ export async function seedSuperAdmin(prisma: PrismaClient): Promise<void> {
   const existing = await prisma.user.findFirst({ where: { email: EMAIL } });
 
   if (!existing) {
+    if (!PASSWORD) {
+      throw new Error("Set SUPER_ADMIN_PASSWORD before bootstrapping the first Super Admin.");
+    }
     const localAuth = betterAuth({
       database: prismaAdapter(prisma, { provider: "postgresql" }),
       emailAndPassword: { enabled: true },
@@ -54,6 +57,5 @@ export async function seedSuperAdmin(prisma: PrismaClient): Promise<void> {
     update: {},
   });
 
-  console.log(`✅ Super Admin ready - login: ${EMAIL} / ${PASSWORD}`);
-  console.log("   ⚠  Change the password after first login!\n");
+  console.log("✅ Super Admin bootstrap complete. Credentials were not logged.\n");
 }

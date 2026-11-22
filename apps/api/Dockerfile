@@ -1,6 +1,6 @@
 FROM node:22-alpine AS builder
 RUN apk add --no-cache libc6-compat
-RUN npm install -g pnpm turbo
+RUN npm install -g pnpm@9.0.0 turbo@2.10.11
 WORKDIR /app
 COPY . .
 RUN turbo prune --scope=api --docker
@@ -14,7 +14,9 @@ WORKDIR /app
 COPY --from=builder /app/out/json/ .
 COPY --from=builder /app/out/pnpm-lock.yaml ./pnpm-lock.yaml
 COPY --from=builder /app/out/pnpm-workspace.yaml ./pnpm-workspace.yaml
-RUN pnpm install
+COPY --from=builder /app/out/full/packages/database/prisma ./packages/database/prisma
+COPY --from=builder /app/out/full/packages/database/prisma.config.ts ./packages/database/prisma.config.ts
+RUN pnpm install --frozen-lockfile
 
 # Build the project and its dependencies
 COPY --from=builder /app/out/full/ .
@@ -25,6 +27,7 @@ FROM node:22-alpine AS runner
 WORKDIR /app
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 api
+RUN mkdir -p /var/lib/vaultfs && chown api:nodejs /var/lib/vaultfs
 USER api
 
 # Copy the entire monorepo from the installer stage (with built assets and node_modules)
@@ -34,4 +37,4 @@ EXPOSE 4000
 ENV PORT=4000
 
 WORKDIR /app
-CMD ["node", "apps/api/dist/index.js"]
+CMD ["node", "apps/api/dist/index.cjs"]

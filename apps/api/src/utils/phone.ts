@@ -1,5 +1,6 @@
-export function normalizePhone(phone: string) {
-  return phone.replace(/\s+/g, "");
-}
+import { parsePhoneNumberFromString } from "libphonenumber-js";
 
-// later to be migrated to proper E.164 format using library like google-libphonenumber
+export function normalizeRecoveryPhone(value: string): string | null {
+  const parsed = parsePhoneNumberFromString(value, "IN");
+  return parsed?.isValid() ? parsed.number : null;
+}

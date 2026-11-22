@@ -11,6 +11,8 @@ node_modules
 .env.development.local
 .env.test.local
 .env.production.local
+.vaultfs-storage/
+storage/
 
 # Testing
 coverage
@@ -34,5 +36,15 @@ yarn-debug.log*
 yarn-error.log*
 
 # Misc
+playwright-report/
+test-results/
 .DS_Store
 *.pem
+
+## Docs
+docs/
+!docs/
+!docs/**/
+!docs/**/*.md
+!docs/screenshots/dockyard-desktop.png
+!docs/screenshots/dockyard-mobile.png

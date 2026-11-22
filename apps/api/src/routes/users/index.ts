@@ -5,23 +5,7 @@ import { prisma } from "@repo/database";
 import { requireAuth } from "../../middleware/auth";
 import { authorize } from "../../middleware/rbac";
 import { permissionService, roleService } from "../../rbac";
-import { scrypt, randomBytes } from "node:crypto";
-
-function hashPassword(password: string): Promise<string> {
-  const salt = randomBytes(16).toString("hex");
-  return new Promise((resolve, reject) => {
-    scrypt(
-      password.normalize("NFKC"),
-      salt,
-      64,
-      { N: 16384, r: 16, p: 1, maxmem: 128 * 16384 * 16 * 2 },
-      (err, key) => {
-        if (err) reject(err);
-        else resolve(`${salt}:${key.toString("hex")}`);
-      },
-    );
-  });
-}
+import { hashPassword } from "better-auth/crypto";
 
 const createUserSchema = z.object({
   name: z.string().min(1),
@@ -201,6 +185,7 @@ export async function usersRoutes(app: FastifyInstance) {
           id: crypto.randomUUID(),
           accountId: userId,
           providerId: "credential",
+          issuer: "local:credential",
           userId,
           password: hashed,
         },
@@ -380,6 +365,21 @@ export async function usersRoutes(app: FastifyInstance) {
         return reply.status(404).send({ error: "User not found" });
       }
 
+      if (data.data.roleIds !== undefined) {
+        const actor = (request as any).user;
+        const authorization = await permissionService.getAuthorizationContext(actor.id);
+        if (!authorization.isSuperAdmin) {
+          return reply.status(403).send({ error: "Only Super Admin can assign user roles" });
+        }
+        const requestedRoles = await prisma.role.findMany({
+          where: { id: { in: data.data.roleIds } },
+          select: { id: true },
+        });
+        if (requestedRoles.length !== new Set(data.data.roleIds).size) {
+          return reply.status(400).send({ error: "One or more roles do not exist" });
+        }
+      }
+
       const user = await prisma.user.update({
         where: { id },
         data: {
@@ -397,19 +397,14 @@ export async function usersRoutes(app: FastifyInstance) {
       });
 
       if (data.data.roleIds !== undefined) {
-        const actor = (request as any).user;
-        const authorization = await permissionService.getAuthorizationContext(
-          actor.id,
-        );
-
-        if (authorization.isSuperAdmin) {
-          await prisma.userRole.deleteMany({ where: { userId: id } });
-          if (data.data.roleIds.length > 0) {
-            await prisma.userRole.createMany({
-              data: data.data.roleIds.map((roleId) => ({ userId: id, roleId })),
+        await prisma.$transaction(async (tx) => {
+          await tx.userRole.deleteMany({ where: { userId: id } });
+          if (data.data.roleIds!.length > 0) {
+            await tx.userRole.createMany({
+              data: data.data.roleIds!.map((roleId) => ({ userId: id, roleId })),
             });
           }
-        }
+        });
       }
 
       return reply.send({ user });
@@ -540,7 +535,7 @@ export async function usersRoutes(app: FastifyInstance) {
       // Update the credential account for this user
       const updated = await prisma.account.updateMany({
         where: { userId: id, providerId: "credential" },
-        data: { password: hashed },
+        data: { password: hashed, issuer: "local:credential" },
       });
 
       if (updated.count === 0) {
@@ -550,6 +545,7 @@ export async function usersRoutes(app: FastifyInstance) {
             id: crypto.randomUUID(),
             accountId: id,
             providerId: "credential",
+            issuer: "local:credential",
             userId: id,
             password: hashed,
           },
