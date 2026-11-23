@@ -51,8 +51,8 @@ export function verifySignedFileToken(token: string, secret: string, nowSeconds 
   if (token.length > 1024) return null;
   const parts = token.split(".");
   if (parts.length !== 2 || !/^[A-Za-z0-9_-]+$/.test(parts[0]!) || !/^[A-Za-z0-9_-]{43}$/.test(parts[1]!)) return null;
-  const actual = Buffer.from(parts[1]!, "base64url");
-  const expected = Buffer.from(signature(parts[0]!, secret), "base64url");
+  const actual = Buffer.from(parts[1]!, "ascii");
+  const expected = Buffer.from(signature(parts[0]!, secret), "ascii");
   if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) return null;
   try {
     const value = JSON.parse(Buffer.from(parts[0]!, "base64url").toString("utf8")) as Partial<SignedFileClaims>;

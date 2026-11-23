@@ -13,22 +13,6 @@ const trustedOrigins = rawOrigins
   .map((o) => o.trim())
   .filter(Boolean);
 
-// Google sign-in on the admin login page is restricted to staff Workspace
-// domains. Google's own `hd` provider option only supports a single domain,
-// so multi-domain restriction is enforced in the user.create hook below
-// instead (see the emailVerified check for why this only affects OAuth sign-ups).
-const allowedGoogleDomains = (
-  process.env.GOOGLE_ALLOWED_DOMAINS ?? "nitp.ac.in"
-)
-  .split(",")
-  .map((d) => d.trim().toLowerCase())
-  .filter(Boolean);
-
-function isAllowedGoogleEmail(email: string) {
-  const domain = email.split("@")[1]?.toLowerCase();
-  return !!domain && allowedGoogleDomains.includes(domain);
-}
-
 const authBaseUrl = process.env.BETTER_AUTH_URL ?? "http://localhost:4000";
 // Host-only cookies are the safe default. Cross-subdomain sharing requires an
 // explicitly configured COOKIE_DOMAIN matching the deployment's public domain.
@@ -54,6 +38,7 @@ export const auth = betterAuth({
   baseURL: process.env.BETTER_AUTH_URL,
   emailAndPassword: {
     enabled: true,
+    disableSignUp: true,
   },
   trustedOrigins,
   trustedProxies: false,
@@ -76,6 +61,7 @@ export const auth = betterAuth({
     google: {
       clientId: process.env.GOOGLE_CLIENT_ID ?? "",
       clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
+      disableSignUp: true,
     },
   },
   account: {
@@ -91,13 +77,8 @@ export const auth = betterAuth({
   databaseHooks: {
     user: {
       create: {
-        before: async (user) => {
-          if (user.emailVerified && !isAllowedGoogleEmail(user.email)) {
-            throw new APIError("FORBIDDEN", {
-              message:
-                "Sign-in is restricted to vaultfs.com google accounts.",
-            });
-          }
+        before: async () => {
+          throw new APIError("FORBIDDEN", { message: "Public account registration is disabled." });
         },
       },
     },
@@ -151,15 +132,6 @@ export const auth = betterAuth({
         });
       },
 
-      signUpOnVerification: {
-        getTempName(phoneNumber) {
-          return phoneNumber;
-        },
-
-        getTempEmail(phoneNumber) {
-          return `${phoneNumber}@vaultfs.local`;
-        },
-      },
     }),
     trustedDevice(),
   ],

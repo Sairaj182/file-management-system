@@ -32,9 +32,9 @@ export function DockyardDetail({
       </>
     );
   const { memberRole, status, notes } = yard.value;
-  const mayManageMembers = account.isSuperAdmin || memberRole === "OWNER";
+  const mayManageMembers = account.isSuperAdmin || memberRole === "ADMIN";
   const mayWrite =
-    account.isSuperAdmin || memberRole === "OWNER" || memberRole === "MANAGER";
+    account.isSuperAdmin || memberRole === "ADMIN" || memberRole === "MANAGER";
   return (
     <>
       <Link className="crumb" href="/dockyards">
@@ -77,6 +77,8 @@ export function DockyardDetail({
       {selected === "Members" && mayManageMembers && (
         <Members
           path={path}
+          dockyardId={id}
+          canProvision={account.isSuperAdmin}
           accessChanged={() => {
             setSelected("Files");
             yard.refresh();
@@ -122,7 +124,7 @@ console.log(result.data[0].id);`;
       <p>
         {mayWrite
           ? "Create a key under API keys and select WRITE to upload files."
-          : "Ask a Dockyard Owner or Manager for a scoped API key."}{" "}
+          : "Ask a Dockyard Admin or Manager for a scoped API key."}{" "}
         Store its secret in your server environment.
       </p>
       <dl className="details">

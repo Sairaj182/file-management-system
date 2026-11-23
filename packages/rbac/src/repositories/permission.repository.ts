@@ -1,5 +1,3 @@
-import type { PermissionDefinition } from "../permissions";
-
 import type { AuthorizationContext } from "../types/authorization.types";
 
 export interface PermissionRepository {

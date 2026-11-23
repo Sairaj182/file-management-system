@@ -75,10 +75,10 @@ export async function listAccessibleDockyards(actorId: string, status?: DockStat
   return dockyards;
 }
 
-type MutationStatus = "ok" | "notFound" | "forbidden" | "targetNotFound" | "memberNotFound" | "lastOwner";
+type MutationStatus = "ok" | "notFound" | "forbidden" | "memberNotFound" | "lastAdmin";
 export type MembershipMutation<T> = { status: MutationStatus; value?: T };
 
-async function lockDockyard(tx: Prisma.TransactionClient, dockyardId: string) {
+export async function lockDockyard(tx: Prisma.TransactionClient, dockyardId: string) {
   const rows = await tx.$queryRaw<Array<{ id: string }>>`
     SELECT "id" FROM "Dockyards" WHERE "id" = ${dockyardId} FOR UPDATE
   `;
@@ -111,7 +111,7 @@ async function authorizeMembershipMutation(
     where: { dockyardId_userId: { dockyardId, userId: actorId } },
     select: { role: true },
   });
-  return actorMembership?.role === "OWNER";
+  return actorMembership?.role === "ADMIN";
 }
 
 function mutationAuditAction(action: string) {
@@ -133,34 +133,6 @@ export async function listDockyardMembers(actorId: string, dockyardId: string) {
   });
 }
 
-export async function addDockyardMember(
-  actorId: string,
-  dockyardId: string,
-  userId: string,
-  role: DockyardMemberRole,
-): Promise<MembershipMutation<unknown>> {
-  return prisma.$transaction(async (tx) => {
-    if (!(await lockDockyard(tx, dockyardId))) return { status: "notFound" };
-    if (!(await authorizeMembershipMutation(tx, actorId, dockyardId, "MEMBER_ADD"))) return { status: "forbidden" };
-    if (!(await tx.user.findUnique({ where: { id: userId }, select: { id: true } }))) return { status: "targetNotFound" };
-
-    const member = await tx.dockyardMember.create({
-      data: { dockyardId, userId, role, addedById: actorId },
-      select: { userId: true, role: true, addedById: true, createdAt: true },
-    });
-    await tx.dockyardAuditEvent.create({
-      data: {
-        dockyardId,
-        actorUserId: actorId,
-        targetUserId: userId,
-        action: mutationAuditAction("ADDED"),
-        metadata: { role },
-      },
-    });
-    return { status: "ok", value: member };
-  });
-}
-
 export async function updateDockyardMemberRole(
   actorId: string,
   dockyardId: string,
@@ -173,9 +145,9 @@ export async function updateDockyardMemberRole(
 
     const current = await tx.dockyardMember.findUnique({ where: { dockyardId_userId: { dockyardId, userId } } });
     if (!current) return { status: "memberNotFound" };
-    if (current.role === "OWNER" && role !== "OWNER") {
-      const ownerCount = await tx.dockyardMember.count({ where: { dockyardId, role: "OWNER" } });
-      if (ownerCount <= 1) return { status: "lastOwner" };
+    if (current.role === "ADMIN" && role !== "ADMIN") {
+      const adminCount = await tx.dockyardMember.count({ where: { dockyardId, role: "ADMIN" } });
+      if (adminCount <= 1) return { status: "lastAdmin" };
     }
 
     const member = await tx.dockyardMember.update({
@@ -207,9 +179,9 @@ export async function removeDockyardMember(
 
     const current = await tx.dockyardMember.findUnique({ where: { dockyardId_userId: { dockyardId, userId } } });
     if (!current) return { status: "memberNotFound" };
-    if (current.role === "OWNER") {
-      const ownerCount = await tx.dockyardMember.count({ where: { dockyardId, role: "OWNER" } });
-      if (ownerCount <= 1) return { status: "lastOwner" };
+    if (current.role === "ADMIN") {
+      const adminCount = await tx.dockyardMember.count({ where: { dockyardId, role: "ADMIN" } });
+      if (adminCount <= 1) return { status: "lastAdmin" };
     }
 
     await tx.dockyardMember.delete({ where: { dockyardId_userId: { dockyardId, userId } } });

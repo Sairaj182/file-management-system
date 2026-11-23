@@ -7,16 +7,11 @@ import { authorize } from "../../middleware/rbac";
 import { permissionService, roleService } from "../../rbac";
 import { hashPassword } from "better-auth/crypto";
 
-const createUserSchema = z.object({
-  name: z.string().min(1),
-  email: z.string().email().optional(),
-  phoneNumber: z.string().min(6).optional(),
-  password: z.string().min(8, "Password must be at least 8 characters"),
-});
+import { createManagedUser, createUserSchema, normalizedEmail } from "../../services/user-provisioning";
 
 const updateUserSchema = z.object({
   name: z.string().min(1).optional(),
-  email: z.string().email().optional(),
+  email: normalizedEmail.optional(),
   phoneNumber: z.string().min(6).optional(),
   roleIds: z.array(z.string()).optional(),
 });
@@ -124,76 +119,26 @@ export async function usersRoutes(app: FastifyInstance) {
     },
   );
 
-  // POST /api/users - admin creates a new user
-  app.post(
-    "/",
-    {
-      preHandler: [
-        requireAuth,
-        authorize({ permission: UserPermissions.CREATE_ANY }),
-      ],
-    },
-    async (request, reply) => {
-      const data = createUserSchema.safeParse(request.body);
-      if (!data.success) {
-        return reply.status(400).send({ error: data.error.flatten() });
+  app.post("/", {
+    preHandler: [requireAuth],
+    config: { rateLimit: { max: 60, timeWindow: "1 minute" } },
+  }, async (request, reply) => {
+    const payload = createUserSchema.safeParse(request.body);
+    if (!payload.success) return reply.status(400).send({ error: "Invalid account details. Check the login ID, password, and Dockyard role." });
+    const actorId = (request as any).user.id;
+    try {
+      const result = await createManagedUser(actorId, payload.data);
+      if (result.status === "forbidden") return reply.status(403).send({ error: "Only Super Admin can create accounts." });
+      if (result.status === "notFound") return reply.status(404).send({ error: "Dockyard not found." });
+      return reply.status(201).send({ user: result.user });
+    } catch (error) {
+      if ((error as { code?: string }).code === "P2002") {
+        return reply.status(409).send({ error: "Email already in use." });
       }
-      if (!data.data.email && !data.data.phoneNumber) {
-        return reply
-          .status(400)
-          .send({ error: "email or phoneNumber is required" });
-      }
-
-      if (data.data.email) {
-        const existing = await prisma.user.findUnique({
-          where: { email: data.data.email },
-        });
-        if (existing)
-          return reply.status(409).send({ error: "Email already in use" });
-      }
-      if (data.data.phoneNumber) {
-        const existing = await prisma.user.findUnique({
-          where: { phoneNumber: data.data.phoneNumber },
-        });
-        if (existing)
-          return reply
-            .status(409)
-            .send({ error: "Phone number already in use" });
-      }
-
-      const userId = crypto.randomUUID();
-      const hashed = await hashPassword(data.data.password);
-
-      const user = await prisma.user.create({
-        data: {
-          id: userId,
-          name: data.data.name,
-          email: data.data.email ?? null,
-          phoneNumber: data.data.phoneNumber ?? null,
-        },
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          phoneNumber: true,
-          createdAt: true,
-        },
-      });
-
-      await prisma.account.create({
-        data: {
-          id: crypto.randomUUID(),
-          accountId: userId,
-          providerId: "credential",
-          issuer: "local:credential",
-          userId,
-          password: hashed,
-        },
-      });
-
-      return reply.status(201).send({ user });
-    },
-  );
+      request.log.error({ event: "account_provisioning_failed", actorId }, "Could not create account");
+      return reply.status(500).send({ error: "Could not create account." });
+    }
+  });
 
   // GET /api/users - paginated list
   app.get(

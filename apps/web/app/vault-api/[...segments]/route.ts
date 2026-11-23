@@ -1,7 +1,7 @@
 import { upstream } from "../../../lib/upstream";
 
 const allowed =
-  /^(?:auth\/(?:sign-in\/email|sign-out)|dockyard(?:\/[\w-]+(?:\/members(?:\/[\w-]+)?|\/files(?:\/[\w-]+(?:\/(?:download|verify|signed-url))?)?|\/api-keys(?:\/[\w-]+(?:\/rotate)?)?)?)?)$/;
+  /^(?:auth\/(?:sign-in\/email|sign-out)|users|dockyard(?:\/[\w-]+(?:\/members(?:\/[\w-]+)?|\/files(?:\/[\w-]+(?:\/(?:download|verify|signed-url))?)?|\/api-keys(?:\/[\w-]+(?:\/rotate)?)?)?)?)$/;
 
 async function forward(
   request: Request,
@@ -10,6 +10,9 @@ async function forward(
   const { segments } = await context.params;
   const path = segments.join("/");
   if (!allowed.test(path)) return new Response(null, { status: 404 });
+  if (path === "users" && request.method !== "POST") {
+    return new Response(null, { status: 405 });
+  }
   const url = new URL(request.url);
   const origin = request.headers.get("origin");
   const write = request.method !== "GET";

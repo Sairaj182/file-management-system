@@ -9,7 +9,7 @@ export type DockyardAction =
   | "MANAGE_API_KEYS";
 
 const roleCapabilities: Record<DockyardMemberRole, ReadonlySet<DockyardAction>> = {
-  OWNER: new Set([
+  ADMIN: new Set([
     "VIEW",
     "MANAGE_MEMBERS",
     "UPLOAD_FILE",

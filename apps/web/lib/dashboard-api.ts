@@ -1,4 +1,4 @@
-export type Role = "OWNER" | "MANAGER" | "VIEWER";
+export type Role = "ADMIN" | "MANAGER" | "VIEWER";
 export type Dockyard = {
   id: string;
   notes: string;

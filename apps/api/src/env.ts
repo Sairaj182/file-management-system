@@ -1,5 +1,10 @@
 import { z } from "zod";
 
+const publicHttpUrl = z.url({ protocol: /^https?$/ }).pipe(z.string().refine((value) => {
+  const url = new URL(value);
+  return !url.username && !url.password;
+}, "Public URLs must not include credentials"));
+
 const schema = z.object({
   NODE_ENV: z
     .enum(["development", "production", "test"])
@@ -27,10 +32,10 @@ const schema = z.object({
   BETTER_AUTH_SECRET: z
     .string({ error: "BETTER_AUTH_SECRET is required" })
     .min(32),
-  BETTER_AUTH_URL: z.string().url().default("http://localhost:4000"),
+  BETTER_AUTH_URL: publicHttpUrl.optional(),
   FILE_STORAGE_ROOT: z.string().min(1).default("./.vaultfs-storage"),
   FILE_SIGNING_SECRET: z.string({ error: "FILE_SIGNING_SECRET is required" }).min(32),
-  FILE_PUBLIC_BASE_URL: z.string().url().default("http://localhost:4000"),
+  FILE_PUBLIC_BASE_URL: z.preprocess((value) => value === "" ? undefined : value, publicHttpUrl.optional()),
   FILE_SIGNED_URL_MAX_TTL_SECONDS: z.coerce.number().int().min(30).max(3600).default(300),
   FILE_MAX_SIZE_BYTES: z.coerce.number().int().min(1).max(100 * 1024 * 1024).default(10 * 1024 * 1024),
   FILE_MAX_COUNT: z.coerce.number().int().min(1).max(20).default(5),
@@ -89,6 +94,13 @@ const schema = z.object({
   }),
   AWS_REGION: z.string({ error: "AWS_REGION is required" }),
   AWS_BUCKET_NAME: z.string({ error: "AWS_BUCKET_NAME is required" }),
+}).transform((config, ctx) => {
+  const publicUrl = config.FILE_PUBLIC_BASE_URL ?? config.BETTER_AUTH_URL;
+  if (!publicUrl) {
+    ctx.addIssue({ code: "custom", path: ["FILE_PUBLIC_BASE_URL"], message: "Set FILE_PUBLIC_BASE_URL or BETTER_AUTH_URL to the public API URL" });
+    return z.NEVER;
+  }
+  return { ...config, FILE_PUBLIC_BASE_URL: new URL(publicUrl).origin };
 });
 
 const parsed = schema.safeParse(process.env);

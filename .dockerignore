@@ -9,7 +9,9 @@
 **/.turbo
 **/test-results
 **/playwright-report
+**/release-artifacts
 **/.vaultfs-storage
+/storage
 dist
 build
 coverage

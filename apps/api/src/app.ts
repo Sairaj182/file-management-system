@@ -6,6 +6,7 @@ import fastifyMultipart from "@fastify/multipart";
 import fastifyRateLimit from "@fastify/rate-limit";
 import { env } from "./env";
 import { registerRoutes } from "./routes";
+import { isUntrustedCookieMutation } from "./security/policies";
 
 export function buildApp() {
   const app = Fastify({
@@ -38,6 +39,14 @@ export function buildApp() {
     origin: env.CORS_ORIGIN,
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  });
+
+  app.addHook("onRequest", async (request, reply) => {
+    reply.header("X-Content-Type-Options", "nosniff");
+    reply.header("Referrer-Policy", "no-referrer");
+    if (isUntrustedCookieMutation(request.method, request.headers.cookie, request.headers.origin, env.CORS_ORIGIN)) {
+      return reply.code(403).send({ error: "Request origin rejected" });
+    }
   });
   
   app.register(fastifyCookie);

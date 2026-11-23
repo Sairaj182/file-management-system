@@ -1,5 +1,4 @@
 import type { RoleDefinition, Role } from "../roles/types";
-import type { PermissionDefinition } from "../permissions";
 
 export interface RoleRepository {
   createRole(role: RoleDefinition): Promise<Role>;

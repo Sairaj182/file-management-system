@@ -21,7 +21,7 @@ Content-Type: application/json
 {"notes":"Production assets for Example App"}
 ```
 
-The actor must have the global Dockyard creation permission. The creator becomes the Dockyard Owner. Only its Owner, a Manager, or an explicitly audited Super Admin can manage keys; Viewer and ordinary global Admin cannot.
+The actor must have the global Dockyard creation permission. The creator becomes the Dockyard Admin. The Dockyard Admin, a Manager, or an explicitly audited Super Admin can manage keys.
 
 Issue a key using an authenticated session:
 

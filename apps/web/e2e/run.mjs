@@ -21,7 +21,7 @@ try {
         "test",
         suite + ".spec.ts",
         "--output",
-        "test-results/" + suite,
+        "test-results/" + (process.env.VAULTFS_DOCKER_E2E === "1" ? "docker-" : "") + suite,
       ],
       {
         stdio: "inherit",
