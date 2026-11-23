@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
 import {
   canAssignRoleThroughRoleEndpoint,
+  isUntrustedCookieMutation,
   publicHealthResponse,
   safeSessionLogContext,
 } from "./security/policies";
@@ -28,6 +29,14 @@ test("public health response contains only readiness status", () => {
   assert.deepEqual(publicHealthResponse(true), { status: "ok" });
 });
 
+test("cookie-authenticated writes reject foreign origins while API clients keep access", () => {
+  const trusted = ["https://vaultfs.example"];
+  assert.equal(isUntrustedCookieMutation("POST", "session=test", "https://other.example", trusted), true);
+  assert.equal(isUntrustedCookieMutation("POST", "session=test", trusted[0], trusted), false);
+  assert.equal(isUntrustedCookieMutation("POST", undefined, "https://other.example", trusted), false);
+  assert.equal(isUntrustedCookieMutation("GET", "session=test", "https://other.example", trusted), false);
+});
+
 test("Dockyard creation rejects supplied IDs and validates notes", () => {
   assert.equal(createDockyardSchema.safeParse({ id: "chosen-id" }).success, false);
   assert.equal(createDockyardSchema.safeParse({ notes: "  " }).success, false);
@@ -46,8 +55,8 @@ test("recovery phone input is normalized and validated", () => {
 });
 
 test("Dockyard resource roles default to least privilege", () => {
-  assert.equal(hasDockyardCapability("OWNER", "MANAGE_MEMBERS"), true);
-  assert.equal(hasDockyardCapability("OWNER", "DELETE_FILE"), true);
+  assert.equal(hasDockyardCapability("ADMIN", "MANAGE_MEMBERS"), true);
+  assert.equal(hasDockyardCapability("ADMIN", "DELETE_FILE"), true);
   assert.equal(hasDockyardCapability("MANAGER", "MANAGE_MEMBERS"), false);
   assert.equal(hasDockyardCapability("MANAGER", "UPLOAD_FILE"), true);
   assert.equal(hasDockyardCapability("VIEWER", "VIEW"), true);
@@ -97,6 +106,9 @@ test("signed file tokens bind file and Dockyard, expire, and reject tampering", 
   assert.deepEqual(verifySignedFileToken(token, "test-signing-secret-which-is-long-enough", 1000, 300), claims);
   assert.equal(verifySignedFileToken(token, "wrong-secret-which-is-also-long-enough", 1000, 300), null);
   assert.equal(verifySignedFileToken(`${token.slice(0, -1)}x`, "test-signing-secret-which-is-long-enough", 1000, 300), null);
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+  const equivalentLastCharacter = alphabet[alphabet.indexOf(token.at(-1)!) ^ 1];
+  assert.equal(verifySignedFileToken(token.slice(0, -1) + equivalentLastCharacter, "test-signing-secret-which-is-long-enough", 1000, 300), null);
   assert.equal(verifySignedFileToken(token, "test-signing-secret-which-is-long-enough", 1200, 300), null);
   assert.equal(verifySignedFileToken(token, "test-signing-secret-which-is-long-enough", 1000, 100), null);
 });
@@ -147,5 +159,24 @@ test("local storage bounds streams, cleans interruptions, and fails closed on an
     const resolvedRoot = path.resolve(root);
     assert.ok(resolvedRoot.startsWith(`${path.resolve(tmpdir())}${path.sep}`));
     await rm(resolvedRoot, { recursive: true, force: true });
+  }
+});
+
+test("local storage rejects a linked object directory after initialization", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "vaultfs-storage-shard-"));
+  const storage = new LocalFilesystemStorage(path.join(root, "storage"));
+  const key = "ab".repeat(32);
+  const outside = path.join(root, "outside");
+  try {
+    assert.equal(await storage.exists(key), false);
+    await mkdir(outside);
+    await writeFile(path.join(outside, key), "outside the storage root");
+    await symlink(outside, path.join(root, "storage", "objects", "ab"), process.platform === "win32" ? "junction" : "dir");
+    await assert.rejects(storage.readStream(key), StorageUnavailableError);
+    await assert.rejects(storage.delete(key), StorageUnavailableError);
+  } finally {
+    const resolved = path.resolve(root);
+    assert.equal(path.dirname(resolved), path.resolve(tmpdir()));
+    await rm(resolved, { recursive: true, force: true });
   }
 });

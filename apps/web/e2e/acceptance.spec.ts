@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { test, expect } from "@playwright/test";
-import { createDockyard, login, png } from "./helpers";
+import { createDockyard, login, png, signIn } from "./helpers";
+import { apiBase as api, webBase } from "./targets";
 
-const api = "http://127.0.0.1:4315/api";
 
 test("external upload is visible and manageable in VaultFS", async ({
   page,
@@ -79,10 +79,9 @@ test("browser uploads multiple files and member permissions control the dashboar
   const email = randomUUID() + "@vaultfs-test.invalid";
   const password = "Viewer-" + randomUUID() + "-7!";
   const created = await page.request.post(api + "/users", {
-    data: { name: "Acceptance member", email, password },
+    data: { email, password, dockyardId: id, role: "VIEWER" },
   });
   expect(created.status()).toBe(201);
-  const { user } = (await created.json()) as { user: { id: string } };
   await page
     .getByLabel("Choose files")
     .setInputFiles(
@@ -96,22 +95,13 @@ test("browser uploads multiple files and member permissions control the dashboar
   await expect(page.getByText("Uploaded 2 file(s).")).toBeVisible();
 
   await page.getByRole("button", { name: "Members" }).click();
-  await page.getByRole("button", { name: "Add member" }).click();
-  await page.getByLabel("User ID").fill(user.id);
-  await page.getByRole("button", { name: "Save member" }).click();
   const member = page.getByRole("row").filter({ hasText: email });
   await expect(member.getByText("VIEWER")).toBeVisible();
 
   const viewer = await browser.newPage();
   try {
-    await viewer.goto("http://127.0.0.1:4316/login");
-    await viewer.getByLabel("Email").fill(email);
-    await viewer.getByLabel("Password").fill(password);
-    await viewer.getByRole("button", { name: "Sign in" }).click();
-    await expect(
-      viewer.getByRole("heading", { name: "Dockyards" }),
-    ).toBeVisible();
-    await viewer.goto("http://127.0.0.1:4316/dockyards/" + id);
+    await signIn(viewer, email, password);
+    await viewer.goto(webBase + "/dockyards/" + id);
     await expect(viewer.getByRole("link", { name: "Download" })).toHaveCount(2);
     for (const name of ["Upload files", "API keys", "Members", "Delete"]) {
       await expect(
@@ -152,4 +142,38 @@ test("protected routes require a session and sign-out clears access", async ({
   await expect(page).toHaveURL(/\/login$/);
   await page.goto("/dockyards");
   await expect(page).toHaveURL(/\/login$/);
+});
+
+test("only Super Admin can create a user from the Dockyard dashboard", async ({ page, browser }) => {
+  await login(page);
+  const dockyardId = await createDockyard(page, "Provisioning " + randomUUID());
+  await expect(page.getByRole("link", { name: "User management" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Members" }).click();
+  await expect(page.getByRole("button", { name: "Add member" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Add User", exact: true }).click();
+  const email = `admin-${randomUUID()}@vaultfs-test.invalid`;
+  const password = "Disposable-dashboard-password-8";
+  const form = page.getByRole("dialog", { name: "Create user" });
+  await expect(form.locator("input, select")).toHaveCount(4);
+  await form.getByLabel("Login ID (email)").fill(email);
+  await form.getByLabel("Password", { exact: true }).fill(password);
+  const confirmation = form.getByLabel("Confirm password", { exact: true });
+  await confirmation.fill("Mismatched-password-8");
+  await form.getByRole("combobox", { name: "Role", exact: true }).selectOption("ADMIN");
+  await form.getByRole("button", { name: "Create account" }).click();
+  await expect(form.getByRole("alert")).toHaveText("Passwords must match.");
+  await confirmation.fill(password);
+  await form.getByRole("button", { name: "Create account" }).click();
+  await expect(page.getByRole("row").filter({ hasText: email }).getByText("ADMIN", { exact: true })).toBeVisible();
+
+  const admin = await browser.newPage();
+  try {
+    await signIn(admin, email, password);
+    await admin.goto(webBase + "/dockyards/" + dockyardId);
+    await admin.getByRole("button", { name: "Members" }).click();
+    await expect(admin.getByRole("row").filter({ hasText: email }).getByText("ADMIN", { exact: true })).toBeVisible();
+    await expect(admin.getByRole("button", { name: "Add User", exact: true })).toHaveCount(0);
+  } finally {
+    await admin.close();
+  }
 });

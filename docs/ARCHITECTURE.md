@@ -22,7 +22,11 @@ show. API key secrets exist in the disclosure dialog until it closes.
 
 ## Core domains
 
-VaultFS uses **Dockyard** as its product name for an isolated logical storage warehouse (bucket). The existing Prisma `Dockyards` model and identifiers are canonical; no separate Warehouse model is used. `DockyardMember` grants Owner, Manager, or Viewer resource permissions. These are separate from global Super Admin/Admin/User roles. Ordinary global Admin does not implicitly access member Dockyards. Explicit Super Admin access is audited.
+VaultFS uses **Dockyard** for an isolated logical storage warehouse. `DockyardMember` assigns `ADMIN`, `MANAGER`, or `VIEWER` within one Dockyard. The global role named Super Admin is the system administrator. The existing global Admin and User roles remain for RBAC compatibility. Dockyard Admin authority comes from membership in the target Dockyard. Explicit Super Admin access is audited.
+
+A Super Admin opens a Dockyard and selects **Members → Add User**. The form takes a login ID (email), an initial password with confirmation, and a Dockyard role. The account, Better Auth credential, membership, and audit entry are written in one transaction. Dockyard Admins can change or remove existing memberships in their own Dockyards. Those changes lock the Dockyard and protect the last Admin from removal or demotion.
+
+The existing `PUT /api/users/:id` operation guards global `roleIds` changes with a separate Super Admin check. The provisioning form and endpoint accept no global roles. Public Better Auth signup is disabled. See the [Dockyard Admin migration plan](DOCKYARD_ADMIN_MIGRATION.md).
 
 Better Auth remains the primary session authority. External server applications use Dockyard-bound API keys with stored digests and independent READ, WRITE, and DELETE scopes. A supplied invalid API key fails closed and is never replaced by session-cookie authentication.
 

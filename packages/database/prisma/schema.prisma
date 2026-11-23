@@ -17,6 +17,7 @@ datasource db {
 model User {
   id                  String          @id
   name                String?
+  designation         String?
   email               String?         @unique
   emailVerified       Boolean         @default(false)
   phoneNumber         String?         @unique
@@ -197,9 +198,21 @@ enum DockStatus{
 }
 
 enum DockyardMemberRole {
-  OWNER
+  ADMIN
   MANAGER
   VIEWER
+}
+
+model UserCreationAudit {
+  id           String   @id @default(cuid())
+  actorUserId  String
+  targetUserId String
+  dockyardId   String?
+  dockyardRole DockyardMemberRole?
+  createdAt    DateTime @default(now())
+
+  @@index([actorUserId, createdAt])
+  @@index([targetUserId])
 }
 
 enum ApiKeyScope {

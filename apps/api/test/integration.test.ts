@@ -80,10 +80,11 @@ let createdUserPassword: string;
 let customRoleId: string;
 let dockyardProvisionerRoleId: string;
 
-async function createIntegrationUser(label: string) {
+async function createIntegrationUser(label: string, dockyardId?: string, role = "VIEWER") {
   const email = `${label}-${randomUUID()}@vaultfs-test.invalid`;
   const password = `Vault-${randomUUID()}-Dd6!`;
-  const response = await post("/api/users", { name: label, email, password }, adminCookie);
+  const targetId = dockyardId ?? (await createDockyardFor(adminCookie, `Fixture for ${label}`)).id;
+  const response = await post("/api/users", { email, password, dockyardId: targetId, role }, adminCookie);
   assert.equal(response.status, 201);
   const userId = (await responseJson(response)).user.id as string;
   return { userId, email, password, cookie: await login(email, password) };
@@ -105,7 +106,7 @@ before(async () => {
   process.env.BETTER_AUTH_URL = `http://127.0.0.1:${port}/api/auth`;
   process.env.FILE_STORAGE_ROOT = tempStorageRoot;
   process.env.FILE_SIGNING_SECRET = randomBytes(48).toString("base64url");
-  process.env.FILE_PUBLIC_BASE_URL = `http://127.0.0.1:${port}`;
+  delete process.env.FILE_PUBLIC_BASE_URL;
   process.env.FILE_MAX_SIZE_BYTES = "1048576";
   process.env.FILE_MAX_COUNT = "5";
 
@@ -154,13 +155,73 @@ test("Better Auth login, logout, and expired sessions work over HTTP", async () 
   adminCookie = await login(process.env.SUPER_ADMIN_EMAIL!, process.env.SUPER_ADMIN_PASSWORD!);
 });
 
+test("public email signup cannot create a Better Auth account", async () => {
+  const email = `public-${randomUUID()}@vaultfs-test.invalid`;
+  const response = await post("/api/auth/sign-up/email", {
+    name: "Public signup", email, password: "Disposable-password-8",
+  });
+  assert.ok([400, 403, 404].includes(response.status));
+  assert.equal(await prisma.user.count({ where: { email } }), 0);
+});
+
+test("Super Admin provisions an account and its Dockyard membership in one audited action", async () => {
+  const dockyard = await createDockyardFor(adminCookie, "Provisioning scope");
+  const other = await createDockyardFor(adminCookie, "Unrelated scope");
+  const admin = await createIntegrationUser("provisioning-admin", dockyard.id, "ADMIN");
+  const manager = await createIntegrationUser("provisioning-manager", dockyard.id, "MANAGER");
+  const viewer = await createIntegrationUser("provisioning-viewer", dockyard.id);
+  const regular = await createIntegrationUser("provisioning-regular-user", other.id);
+
+  const email = `provisioned-${randomUUID()}@vaultfs-test.invalid`;
+  const password = "Disposable-initial-password-8";
+  const input = {
+    email: ` ${email.toUpperCase()} `, password, dockyardId: dockyard.id, role: "VIEWER",
+  };
+  assert.equal((await post("/api/users", input)).status, 401);
+  for (const account of [admin, manager, viewer, regular]) {
+    assert.equal((await post("/api/users", input, account.cookie)).status, 403);
+  }
+  assert.equal((await post("/api/users", { ...input, dockyardId: other.id }, admin.cookie)).status, 403);
+  for (const invalid of [{ dockyardId: undefined }, { role: undefined }, { roleIds: ["Super Admin"] }, { password: "short" }, { designation: "Operations" }, { role: "SUPER_ADMIN" }]) {
+    assert.equal((await post("/api/users", { ...input, ...invalid }, adminCookie)).status, 400);
+  }
+  assert.equal((await request("/api/users/directory?search=provisioning", withCookie(adminCookie))).status, 404);
+  assert.equal((await post(`/api/dockyard/${dockyard.id}/members`, { userId: regular.userId, role: "VIEWER" }, adminCookie)).status, 404);
+  assert.equal((await request("/api/users", {
+    method: "POST", headers: { origin: "https://other.invalid", cookie: adminCookie },
+    body: JSON.stringify(input),
+  })).status, 403);
+  assert.equal((await post("/api/users", { ...input, dockyardId: randomUUID() }, adminCookie)).status, 404);
+  assert.equal(await prisma.user.count({ where: { email } }), 0);
+
+  const [one, two] = await Promise.all([
+    post("/api/users", input, adminCookie),
+    post("/api/users", { ...input, email }, adminCookie),
+  ]);
+  assert.deepEqual([one.status, two.status].sort(), [201, 409]);
+  const { user } = await responseJson(one.status === 201 ? one : two);
+  assert.equal(user.email, email);
+  assert.equal((await post("/api/users", { ...input, dockyardId: other.id }, adminCookie)).status, 409);
+  assert.equal(await prisma.dockyardMember.count({ where: { userId: user.id } }), 1);
+  assert.ok(!Object.hasOwn(user, "password"));
+  const membership = await prisma.dockyardMember.findUniqueOrThrow({ where: { dockyardId_userId: { dockyardId: dockyard.id, userId: user.id } } });
+  assert.equal(membership.role, "VIEWER");
+  assert.equal(await prisma.userRole.count({ where: { userId: user.id } }), 0);
+  assert.equal(await prisma.userCreationAudit.count({ where: { actorUserId: dockyard.createdById, targetUserId: user.id, dockyardId: dockyard.id } }), 1);
+  assert.equal((await request("/api/users/me", withCookie(await login(email, password)))).status, 200);
+  assert.equal((await request(`/api/users/${user.id}`, { method: "PUT", ...withCookie(admin.cookie), body: JSON.stringify({ email: regular.email }) })).status, 403);
+  assert.equal((await post(`/api/users/${user.id}/ban`, {}, admin.cookie)).status, 403);
+});
+
 test("admin-created credentials log in and password reset uses the same Better Auth format", async () => {
   createdUserEmail = `phase1-${randomUUID()}@vaultfs-test.invalid`;
   createdUserPassword = `Initial-${randomUUID()}-Aa9!`;
+  const dockyard = await createDockyardFor(adminCookie, "Credentials fixture");
   const created = await post("/api/users", {
-    name: "Integration User",
     email: createdUserEmail,
     password: createdUserPassword,
+    dockyardId: dockyard.id,
+    role: "VIEWER",
   }, adminCookie);
   assert.equal(created.status, 201);
   createdUserId = (await responseJson(created)).user.id;
@@ -264,22 +325,21 @@ test("Dockyard creation requires an authorized role and validates the request", 
   assert.equal(payload.data.notes, "Integration test Dockyard");
 });
 
-test("the migration preserves Dockyards and backfills creator ownership", async () => {
+test("the migration preserves Dockyards and preserves creator administration", async () => {
   const dockyards = await prisma.dockyards.findMany({ select: { id: true } });
   assert.ok(dockyards.length >= 2, "expected the pre-existing isolated test Dockyards to remain present");
 
   for (const dockyard of dockyards) {
-    const ownerCount = await prisma.dockyardMember.count({
-      where: { dockyardId: dockyard.id, role: "OWNER" },
+    const adminCount = await prisma.dockyardMember.count({
+      where: { dockyardId: dockyard.id, role: "ADMIN" },
     });
-    assert.ok(ownerCount >= 1, `preserved Dockyard ${dockyard.id} should retain an owner`);
+    assert.ok(adminCount >= 1, `preserved Dockyard ${dockyard.id} should retain an owner`);
   }
 });
 
 test("membership APIs enforce owner boundaries, isolation, and audited global access", async () => {
   const ownerA = await createIntegrationUser("dock-owner-a");
   const ownerB = await createIntegrationUser("dock-owner-b");
-  const viewer = await createIntegrationUser("dock-viewer");
   const outsider = await createIntegrationUser("dock-outsider");
   const globalAdmin = await createIntegrationUser("global-admin");
 
@@ -301,13 +361,14 @@ test("membership APIs enforce owner boundaries, isolation, and audited global ac
 
   const dockyardA = await createDockyardFor(ownerA.cookie, "Owned by owner A");
   const dockyardB = await createDockyardFor(ownerB.cookie, "Owned by owner B");
+  const viewer = await createIntegrationUser("dock-viewer", dockyardA.id);
   assert.equal(dockyardA.createdById, ownerA.userId);
   assert.equal(dockyardB.createdById, ownerB.userId);
 
   const ownerMembership = await prisma.dockyardMember.findUniqueOrThrow({
     where: { dockyardId_userId: { dockyardId: dockyardA.id, userId: ownerA.userId } },
   });
-  assert.equal(ownerMembership.role, "OWNER");
+  assert.equal(ownerMembership.role, "ADMIN");
 
   const ownerList = await responseJson(await request("/api/dockyard", withCookie(ownerA.cookie)));
   assert.equal(ownerList.success, "true", "preserve the existing Dockyard list response shape");
@@ -315,17 +376,12 @@ test("membership APIs enforce owner boundaries, isolation, and audited global ac
   assert.ok(!ownerList.data.some((dockyard: { id: string }) => dockyard.id === dockyardB.id));
   assert.equal((await request(`/api/dockyard/${dockyardB.id}`, withCookie(ownerA.cookie))).status, 404);
 
-  const added = await post(`/api/dockyard/${dockyardA.id}/members`, {
-    userId: viewer.userId,
-    role: "VIEWER",
-  }, ownerA.cookie);
-  assert.equal(added.status, 201);
   assert.equal((await request(`/api/dockyard/${dockyardA.id}`, withCookie(viewer.cookie))).status, 200);
   assert.equal((await request(`/api/dockyard/${dockyardA.id}/members`, withCookie(ownerA.cookie))).status, 200);
 
   const viewerAdd = await post(`/api/dockyard/${dockyardB.id}/members`, {
     userId: viewer.userId,
-    role: "OWNER",
+    role: "ADMIN",
   }, viewer.cookie);
   assert.equal(viewerAdd.status, 404);
   const viewerChange = await request(`/api/dockyard/${dockyardA.id}/members/${viewer.userId}`, {
@@ -336,7 +392,7 @@ test("membership APIs enforce owner boundaries, isolation, and audited global ac
   assert.equal(viewerChange.status, 404);
   const outsiderSelfAdd = await post(`/api/dockyard/${dockyardA.id}/members`, {
     userId: outsider.userId,
-    role: "OWNER",
+    role: "ADMIN",
   }, outsider.cookie);
   assert.equal(outsiderSelfAdd.status, 404);
 
@@ -359,11 +415,11 @@ test("membership APIs enforce owner boundaries, isolation, and audited global ac
   });
   assert.equal(restored.status, 200);
 
-  const lastOwnerRemoval = await request(`/api/dockyard/${dockyardA.id}/members/${ownerA.userId}`, {
+  const lastAdminRemoval = await request(`/api/dockyard/${dockyardA.id}/members/${ownerA.userId}`, {
     method: "DELETE",
     headers: { cookie: ownerA.cookie },
   });
-  assert.equal(lastOwnerRemoval.status, 409);
+  assert.equal(lastAdminRemoval.status, 409);
 
   const globalAdminRole = await prisma.role.findUniqueOrThrow({ where: { name: "Admin" } });
   const assignGlobalAdmin = await request(`/api/users/${globalAdmin.userId}`, {
@@ -401,7 +457,7 @@ test("membership APIs enforce owner boundaries, isolation, and audited global ac
   assert.equal(viewerRemoval.status, 200);
 });
 
-async function createApiKeyOwner(label: string) {
+async function createApiKeyAdmin(label: string) {
   const actor = await createIntegrationUser(label);
   const roleResponse = await post("/api/roles", {
     name: `API Key Provisioner ${randomUUID()}`,
@@ -425,7 +481,7 @@ function multipart(files: Array<{ name: string; bytes: Buffer; contentType?: str
 }
 
 test("API key creation discloses the secret once and stores only a digest", async () => {
-  const owner = await createApiKeyOwner("api-key-owner");
+  const owner = await createApiKeyAdmin("api-key-owner");
   assert.equal((await post(`/api/dockyard/${owner.dockyard.id}/api-keys`, { scopes: ["READ"], expiresAt: new Date(Date.now() - 1000).toISOString() }, owner.cookie)).status, 400);
   const created = await post(`/api/dockyard/${owner.dockyard.id}/api-keys`, { name: "integration", scopes: ["READ", "WRITE"] }, owner.cookie);
   assert.equal(created.status, 201);
@@ -454,7 +510,7 @@ test("API key creation discloses the secret once and stores only a digest", asyn
 });
 
 test("API key management denies viewers and ordinary global admins; Super Admin access is audited", async () => {
-  const owner = await createApiKeyOwner("api-key-access-owner");
+  const owner = await createApiKeyAdmin("api-key-access-owner");
   const viewer = await createIntegrationUser("api-key-viewer");
   const manager = await createIntegrationUser("api-key-manager");
   await prisma.dockyardMember.create({ data: { dockyardId: owner.dockyard.id, userId: viewer.userId, role: "VIEWER", addedById: owner.userId } });
@@ -472,8 +528,8 @@ test("API key management denies viewers and ordinary global admins; Super Admin 
 });
 
 test("API key scopes, Dockyard isolation, invalid credentials, and cookie fallback are denied", async () => {
-  const owner = await createApiKeyOwner("api-key-scope-owner");
-  const other = await createApiKeyOwner("api-key-other-owner");
+  const owner = await createApiKeyAdmin("api-key-scope-owner");
+  const other = await createApiKeyAdmin("api-key-other-owner");
   const keyResponse = await post(`/api/dockyard/${owner.dockyard.id}/api-keys`, { scopes: ["READ"] }, owner.cookie);
   const secret = (await responseJson(keyResponse)).secret as string;
   assert.equal((await apiKeyRequest("/__test/api-key/write", secret)).status, 403);
@@ -484,7 +540,7 @@ test("API key scopes, Dockyard isolation, invalid credentials, and cookie fallba
 });
 
 test("expired, revoked, and inactive-Dockyard API keys are rejected", async () => {
-  const owner = await createApiKeyOwner("api-key-expired-owner");
+  const owner = await createApiKeyAdmin("api-key-expired-owner");
   const expiredResponse = await post(`/api/dockyard/${owner.dockyard.id}/api-keys`, { scopes: ["READ"], expiresAt: new Date(Date.now() + 60_000).toISOString() }, owner.cookie);
   const expiredBody = await responseJson(expiredResponse);
   await prisma.api.update({ where: { id: expiredBody.data.id }, data: { expiresAt: new Date(Date.now() - 1000) } });
@@ -500,7 +556,7 @@ test("expired, revoked, and inactive-Dockyard API keys are rejected", async () =
 });
 
 test("rotation immediately revokes the old secret and returns a new one once", async () => {
-  const owner = await createApiKeyOwner("api-key-rotation-owner");
+  const owner = await createApiKeyAdmin("api-key-rotation-owner");
   const first = await post(`/api/dockyard/${owner.dockyard.id}/api-keys`, { scopes: ["READ", "DELETE"] }, owner.cookie);
   const old = await responseJson(first);
   const rotatedResponse = await post(`/api/dockyard/${owner.dockyard.id}/api-keys/${old.data.id}/rotate`, {}, owner.cookie);
@@ -515,7 +571,7 @@ test("rotation immediately revokes the old secret and returns a new one once", a
 });
 
 test("concurrent API key use and revocation leave the credential unusable afterwards", async () => {
-  const owner = await createApiKeyOwner("api-key-race-owner");
+  const owner = await createApiKeyAdmin("api-key-race-owner");
   const created = await post(`/api/dockyard/${owner.dockyard.id}/api-keys`, { scopes: ["READ"] }, owner.cookie);
   const key = await responseJson(created);
   const concurrentUse = apiKeyRequest("/api/integration/me", key.secret);
@@ -527,7 +583,7 @@ test("concurrent API key use and revocation leave the credential unusable afterw
 });
 
 test("file API supports scoped upload, list, download, verify, signed download, and deletion", async () => {
-  const owner = await createApiKeyOwner("file-flow-owner");
+  const owner = await createApiKeyAdmin("file-flow-owner");
   const created = await post(`/api/dockyard/${owner.dockyard.id}/api-keys`, { scopes: ["READ", "WRITE", "DELETE"] }, owner.cookie);
   const key = await responseJson(created);
   const upload = await apiKeyRequest(`/api/dockyard/${owner.dockyard.id}/files`, key.secret, { method: "POST", body: multipart([{ name: "tiny.png", bytes: pngFixture, contentType: "text/plain" }]) });
@@ -552,16 +608,17 @@ test("file API supports scoped upload, list, download, verify, signed download, 
   const verified = await apiKeyRequest(`/api/dockyard/${owner.dockyard.id}/files/${file.id}/verify`, key.secret, { method: "POST" });
   assert.equal((await responseJson(verified)).data.matches, true);
 
-  const signed = await apiKeyRequest(`/api/dockyard/${owner.dockyard.id}/files/${file.id}/signed-url`, key.secret, { method: "POST", body: JSON.stringify({ expiresInSeconds: 1 }) });
+  const signed = await apiKeyRequest(`/api/dockyard/${owner.dockyard.id}/files/${file.id}/signed-url`, key.secret, { method: "POST", body: JSON.stringify({ expiresInSeconds: 2 }) });
   assert.equal(signed.status, 200);
-  const signedUrl = new URL((await responseJson(signed)).data.url);
+  const signedData = (await responseJson(signed)).data;
+  const signedUrl = new URL(signedData.url);
   assert.equal(signedUrl.origin, baseUrl);
   const signedDownload = await request(signedUrl.pathname);
   assert.equal(signedDownload.status, 200, `signed download rejected: ${await signedDownload.clone().text()}`);
   assert.deepEqual(Buffer.from(await signedDownload.arrayBuffer()), pngFixture);
   const tamperedToken = `${signedUrl.pathname.slice(0, -1)}${signedUrl.pathname.endsWith("x") ? "y" : "x"}`;
   assert.equal((await request(tamperedToken)).status, 401);
-  await new Promise((resolve) => setTimeout(resolve, 1100));
+  await new Promise((resolve) => setTimeout(resolve, Math.max(0, Date.parse(signedData.expiresAt) - Date.now()) + 50));
   assert.equal((await request(signedUrl.pathname)).status, 401);
 
   const lastingSigned = await apiKeyRequest(`/api/dockyard/${owner.dockyard.id}/files/${file.id}/signed-url`, key.secret, { method: "POST" });
@@ -573,7 +630,7 @@ test("file API supports scoped upload, list, download, verify, signed download, 
 });
 
 test("concurrent file deletion never restores download access", async () => {
-  const owner = await createApiKeyOwner("file-concurrent-delete");
+  const owner = await createApiKeyAdmin("file-concurrent-delete");
   const issued = await post(`/api/dockyard/${owner.dockyard.id}/api-keys`, { scopes: ["READ", "WRITE", "DELETE"] }, owner.cookie);
   const key = await responseJson(issued);
   const uploaded = await apiKeyRequest(`/api/dockyard/${owner.dockyard.id}/files`, key.secret, { method: "POST", body: multipart([{ name: "concurrent.png", bytes: pngFixture }]) });
@@ -593,8 +650,8 @@ test("concurrent file deletion never restores download access", async () => {
 });
 
 test("file uploads enforce size, MIME signatures, empty-file, count, scope, Dockyard and revoked-key rules", async () => {
-  const owner = await createApiKeyOwner("file-policy-owner");
-  const other = await createApiKeyOwner("file-policy-other");
+  const owner = await createApiKeyAdmin("file-policy-owner");
+  const other = await createApiKeyAdmin("file-policy-other");
   const readOnly = await post(`/api/dockyard/${owner.dockyard.id}/api-keys`, { scopes: ["READ"] }, owner.cookie);
   const readKey = await responseJson(readOnly);
   assert.equal((await apiKeyRequest(`/api/dockyard/${owner.dockyard.id}/files`, readKey.secret, { method: "POST", body: multipart([{ name: "x.png", bytes: pngFixture }]) })).status, 403);
@@ -622,7 +679,7 @@ test("file uploads enforce size, MIME signatures, empty-file, count, scope, Dock
 });
 
 test("Dockyard membership governs session file actions and quarantined files cannot be read", async () => {
-  const owner = await createApiKeyOwner("file-membership-owner");
+  const owner = await createApiKeyAdmin("file-membership-owner");
   const viewer = await createIntegrationUser("file-viewer");
   const manager = await createIntegrationUser("file-manager");
   await prisma.dockyardMember.create({ data: { dockyardId: owner.dockyard.id, userId: viewer.userId, role: "VIEWER", addedById: owner.userId } });
@@ -644,7 +701,7 @@ test("Dockyard membership governs session file actions and quarantined files can
 });
 
 test("checksum mismatch quarantines the file, and reconciliation repairs interrupted storage states", async () => {
-  const owner = await createApiKeyOwner("file-reconciliation-owner");
+  const owner = await createApiKeyAdmin("file-reconciliation-owner");
   const keyResponse = await post(`/api/dockyard/${owner.dockyard.id}/api-keys`, { scopes: ["READ", "WRITE"] }, owner.cookie);
   const key = await responseJson(keyResponse);
   const uploaded = await apiKeyRequest(`/api/dockyard/${owner.dockyard.id}/files`, key.secret, { method: "POST", body: multipart([{ name: "corrupt.png", bytes: pngFixture }]) });
@@ -677,7 +734,7 @@ test("checksum mismatch quarantines the file, and reconciliation repairs interru
 });
 
 test("a PostgreSQL metadata insert failure leaves no staged object", async () => {
-  const owner = await createApiKeyOwner("file-database-failure-owner");
+  const owner = await createApiKeyAdmin("file-database-failure-owner");
   const issued = await post(`/api/dockyard/${owner.dockyard.id}/api-keys`, { scopes: ["WRITE"] }, owner.cookie);
   const key = await responseJson(issued);
   await prisma.$executeRawUnsafe(`CREATE OR REPLACE FUNCTION public.vaultfs_test_fail_file_insert() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW."originalName" = 'db-failure.png' THEN RAISE EXCEPTION 'test database failure'; END IF; RETURN NEW; END; $$`);
@@ -693,9 +750,8 @@ test("a PostgreSQL metadata insert failure leaves no staged object", async () =>
   }
 });
 
-test("concurrent owner removals preserve at least one Dockyard owner", async () => {
+test("concurrent Admin removals preserve at least one Dockyard Admin", async () => {
   const owner = await createIntegrationUser("concurrent-owner");
-  const secondOwner = await createIntegrationUser("concurrent-second-owner");
   assert.ok(dockyardProvisionerRoleId, "membership integration test should create its own provisioning role");
   const grant = await request(`/api/users/${owner.userId}`, {
     method: "PUT",
@@ -705,22 +761,19 @@ test("concurrent owner removals preserve at least one Dockyard owner", async () 
   assert.equal(grant.status, 200);
 
   const dockyard = await createDockyardFor(owner.cookie, "Concurrent owner invariant");
-  assert.equal((await post(`/api/dockyard/${dockyard.id}/members`, {
-    userId: secondOwner.userId,
-    role: "OWNER",
-  }, owner.cookie)).status, 201);
+  const secondAdmin = await createIntegrationUser("concurrent-second-owner", dockyard.id, "ADMIN");
 
   const removals = await Promise.all([
     request(`/api/dockyard/${dockyard.id}/members/${owner.userId}`, {
       method: "DELETE",
       headers: { cookie: adminCookie },
     }),
-    request(`/api/dockyard/${dockyard.id}/members/${secondOwner.userId}`, {
+    request(`/api/dockyard/${dockyard.id}/members/${secondAdmin.userId}`, {
       method: "DELETE",
       headers: { cookie: adminCookie },
     }),
   ]);
   assert.deepEqual(removals.map((response) => response.status).sort(), [200, 409]);
-  assert.equal(await prisma.dockyardMember.count({ where: { dockyardId: dockyard.id, role: "OWNER" } }), 1);
+  assert.equal(await prisma.dockyardMember.count({ where: { dockyardId: dockyard.id, role: "ADMIN" } }), 1);
 });
 

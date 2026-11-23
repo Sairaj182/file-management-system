@@ -1,63 +1,44 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { api, type Member, type Role } from "../lib/dashboard-api";
+import { api, type Member } from "../lib/dashboard-api";
 import { Badge, Feedback, Modal, useResource } from "./common";
 import { errorMessage, useAccount } from "./workspace";
-
-const roles = ["VIEWER", "MANAGER", "OWNER"] as const;
-function RoleSelect({ initial = "VIEWER" }: { initial?: Role }) {
-  return (
-    <div className="field">
-      <label htmlFor="member-role">Role</label>
-      <select id="member-role" name="role" defaultValue={initial}>
-        {roles.map((role) => (
-          <option key={role}>{role}</option>
-        ))}
-      </select>
-    </div>
-  );
-}
+import { CreateUserForm, RoleSelect } from "./user-provisioning";
 
 export function Members({
   path,
+  dockyardId,
+  canProvision,
   accessChanged,
 }: {
   path: string;
+  dockyardId: string;
+  canProvision: boolean;
   accessChanged: () => void;
 }) {
   const account = useAccount();
   const list = useResource<Member[]>(path + "/members");
-  const [edit, setEdit] = useState<{
-    mode: "add" | "edit" | "remove";
-    item?: Member;
-  }>();
+  const [edit, setEdit] = useState<{ mode: "create" } | { mode: "edit" | "remove"; item: Member }>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const owners = list.value?.filter((member) => member.role === "OWNER").length;
-  function open(mode: "add" | "edit" | "remove", item?: Member) {
+  const admins = list.value?.filter((member) => member.role === "ADMIN").length;
+  function openMember(mode: "edit" | "remove", item: Member) {
     setError("");
     setEdit({ mode, item });
   }
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!edit) return;
+    if (!edit || edit.mode === "create") return;
     const form = new FormData(event.currentTarget);
     const item = edit.item;
-    const endpoint =
-      path + "/members" + (item ? "/" + encodeURIComponent(item.userId) : "");
+    const endpoint = path + "/members/" + encodeURIComponent(item.userId);
     setBusy(true);
     try {
       if (edit.mode === "remove") await api(endpoint, "DELETE");
-      else if (edit.mode === "edit")
-        await api(endpoint, "PATCH", { role: form.get("role") });
-      else
-        await api(endpoint, "POST", {
-          userId: String(form.get("userId")).trim(),
-          role: form.get("role"),
-        });
+      else await api(endpoint, "PATCH", { role: form.get("role") });
       setEdit(undefined);
-      if (item?.userId === account.user.id) accessChanged();
+      if (item.userId === account.user.id) accessChanged();
       else list.refresh();
     } catch (cause) {
       setError(errorMessage(cause));
@@ -69,9 +50,7 @@ export function Members({
     <section className="panel">
       <div className="spread">
         <h2>Members</h2>
-        <button className="primary" onClick={() => open("add")}>
-          Add member
-        </button>
+        {canProvision && <button className="primary" onClick={() => setEdit({ mode: "create" })}>Add User</button>}
       </div>
       <Feedback {...list} retry={list.refresh} />
       {list.value?.length === 0 && (
@@ -91,21 +70,21 @@ export function Members({
               {list.value.map((item) => (
                 <tr key={item.userId}>
                   <td>
-                    <strong>{item.user.name}</strong>
-                    <small>{item.user.email}</small>
+                    <strong>{item.user.name || item.user.email}</strong>
+                    {item.user.name && item.user.name !== item.user.email && <small>{item.user.email}</small>}
                   </td>
                   <td>
                     <Badge value={item.role} />
                   </td>
                   <td>
-                    {owners === 1 && item.role === "OWNER" ? (
-                      <span className="muted">Last owner</span>
+                    {admins === 1 && item.role === "ADMIN" ? (
+                      <span className="muted">Last Admin</span>
                     ) : (
                       <div className="actions">
-                        <button onClick={() => open("edit", item)}>
+                        <button onClick={() => openMember("edit", item)}>
                           Change role
                         </button>
-                        <button onClick={() => open("remove", item)}>
+                        <button onClick={() => openMember("remove", item)}>
                           Remove
                         </button>
                       </div>
@@ -117,39 +96,25 @@ export function Members({
           </table>
         </div>
       )}
-      {edit && (
+      {edit?.mode === "create" && (
+        <Modal title="Create user" close={() => { if (!busy) setEdit(undefined); }}>
+          <CreateUserForm dockyardId={dockyardId} onBusy={setBusy}
+            onCreated={() => { setEdit(undefined); list.refresh(); }} />
+        </Modal>
+      )}
+      {edit && edit.mode !== "create" && (
         <Modal
-          title={
-            edit.mode === "add"
-              ? "Add member"
-              : edit.mode === "edit"
-                ? "Change role"
-                : "Remove member"
-          }
+          title={edit.mode === "edit" ? "Change role" : "Remove member"}
           close={() => {
             if (!busy) setEdit(undefined);
           }}
         >
           <form onSubmit={submit} className="stack">
-            {edit.mode === "add" && (
-              <label>
-                User ID
-                <input
-                  name="userId"
-                  required
-                  placeholder="Existing VaultFS user ID"
-                />
-              </label>
-            )}
-            {edit.item && (
-              <p>
-                {edit.mode === "remove"
-                  ? "Remove access for "
-                  : "Change permissions for "}
-                <strong>{edit.item.user.name}</strong>?
-              </p>
-            )}
-            {edit.mode !== "remove" && <RoleSelect initial={edit.item?.role} />}
+            <p>
+              {edit.mode === "remove" ? "Remove access for " : "Change permissions for "}
+              <strong>{edit.item.user.name || edit.item.user.email}</strong>?
+            </p>
+            {edit.mode === "edit" && <RoleSelect initial={edit.item.role} />}
             {error && (
               <p role="alert" className="error">
                 {error}

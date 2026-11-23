@@ -104,3 +104,9 @@ Checkpoint 4 source implementation adds a streaming local filesystem provider, m
 The Next.js dashboard now connects Better Auth sessions to Dockyards, member management, file operations, scoped API keys and project onboarding. It uses the existing Fastify contracts with an additive caller-role field on Dockyard details. No database migration was required.
 
 **Checkpoint 5 is complete.** All three Playwright acceptance workflows and the usability suite passed against real services and disposable PostgreSQL. Results, desktop and mobile screenshots, and deployment settings are recorded in the [Checkpoint 5 report](CHECKPOINT_5_REPORT.md).
+
+---
+
+# Phase 1 Checkpoint 6 update
+
+Checkpoint 6 validated the local release candidate using the production-oriented Compose topology. All seven test categories passed, including the bounded 40-request performance run with zero errors. The end-to-end browser workflows passed on the built API and web containers. The backup drill restored metadata, object bytes, and working credentials into a separate disposable project. The [Checkpoint 6 report](CHECKPOINT_6_REPORT.md) records verified behavior, timings and the production readiness gaps.

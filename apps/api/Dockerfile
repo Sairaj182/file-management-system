@@ -3,11 +3,11 @@ RUN apk add --no-cache libc6-compat
 RUN npm install -g pnpm@9.0.0 turbo@2.10.11
 WORKDIR /app
 COPY . .
-RUN turbo prune --scope=api --docker
+RUN turbo prune api --docker
 
 FROM node:22-alpine AS installer
 RUN apk add --no-cache libc6-compat
-RUN npm install -g pnpm@9.0.0 turbo
+RUN npm install -g pnpm@9.0.0 turbo@2.10.11
 WORKDIR /app
 
 # First install dependencies (as they change less often)
@@ -36,5 +36,5 @@ COPY --from=installer --chown=api:nodejs /app .
 EXPOSE 4000
 ENV PORT=4000
 
-WORKDIR /app
-CMD ["node", "apps/api/dist/index.cjs"]
+WORKDIR /app/apps/api
+CMD ["node", "--import", "tsx", "dist/index.cjs"]

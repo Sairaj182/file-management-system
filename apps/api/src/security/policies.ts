@@ -6,6 +6,17 @@ export function publicHealthResponse(databaseReady: boolean) {
   return { status: databaseReady ? "ok" : "degraded" };
 }
 
+export function isUntrustedCookieMutation(
+  method: string,
+  cookie: string | undefined,
+  origin: string | undefined,
+  trustedOrigins: readonly string[],
+) {
+  return Boolean(cookie && origin &&
+    !["GET", "HEAD", "OPTIONS"].includes(method) &&
+    !trustedOrigins.includes(origin));
+}
+
 export function canAssignRoleThroughRoleEndpoint(
   role: { isSystem: boolean; name: string } | null,
 ) {

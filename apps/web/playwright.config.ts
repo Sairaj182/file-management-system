@@ -1,17 +1,15 @@
 import { defineConfig } from "@playwright/test";
+import { apiBase as api, webBase as web, dockerTarget } from "./e2e/targets";
 
-const api = "http://127.0.0.1:4315/api";
-const web = "http://127.0.0.1:4316";
 const database = new URL(
   process.env.DATABASE_URL ?? "postgresql://localhost/placeholder",
 );
-if (
-  database.pathname !== "/vaultfs_p1test_1117a" ||
-  database.hostname !== "127.0.0.1" ||
-  database.port !== "5434"
-) {
+const safeTarget = dockerTarget
+  ? database.hostname === "postgres" && database.pathname === "/vaultfs_release_test"
+  : database.pathname === "/vaultfs_p1test_1117a" && database.hostname === "127.0.0.1" && database.port === "5434";
+if (!safeTarget) {
   throw new Error(
-    "Dashboard tests require the disposable VaultFS database at 127.0.0.1:5434.",
+    "Dashboard tests require the configured disposable VaultFS database.",
   );
 }
 
@@ -21,7 +19,7 @@ export default defineConfig({
   expect: { timeout: 15_000 },
   workers: 1,
   use: { baseURL: web, browserName: "chromium", actionTimeout: 10_000 },
-  webServer: [
+  webServer: dockerTarget ? undefined : [
     {
       command: "pnpm --filter api run start",
       cwd: "../..",
@@ -40,7 +38,7 @@ export default defineConfig({
     {
       command: "pnpm exec next dev -H 127.0.0.1 -p 4316",
       port: 4316,
-      env: { API_URL: api, NEXT_PUBLIC_API_URL: api, WEB_ORIGIN: web },
+      env: { API_URL: api, NEXT_PUBLIC_API_URL: api, WEB_ORIGIN: web, VAULTFS_TEST_WEB: "1" },
       timeout: 60_000,
     },
   ],

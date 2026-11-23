@@ -7,10 +7,16 @@
       "inputs": ["$TURBO_DEFAULT$", ".env*"],
       "outputs": [".next/**", "!.next/cache/**", "!.next/dev/**"]
     },
+    "api#build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**"]
+    },
     "lint": {
       "dependsOn": ["^lint"],
       "env": [
         "API_URL",
+        "VAULTFS_DOCKER_E2E",
+        "VAULTFS_TEST_WEB",
         "WEB_ORIGIN",
         "PORT_WEB",
         "API_PORT",
